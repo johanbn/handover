@@ -1,10 +1,11 @@
 To install deps
 
-´´´bash
+```bash
 uv sync
-´´´
-
+```
 To run as module
-´´´bash
-uv run python -m etc etc
-´´´
+
+```bash
+uv run python -m path_to_file
+```
+
