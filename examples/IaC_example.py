@@ -276,14 +276,13 @@ class Orchestrator:
                     print("-----------------------")
                 print("--- End Prompt ---\n")
 
+            history: list[AnyMessage] = []
+            if include_history:
+                history = state.get("messages", [])[-history_window:]
+
             resp = llm.invoke(messages)
 
-            print("********************")
-            print("RESPONSE from LLM:")
-            print(resp)
-            print("type:", type(resp))
-            print("********************")
-
+            # Return ONLY what this node updates
             return {
                 "answer": getattr(resp, "content", ""),  # "" if content is missing or None
                 "messages": state["messages"] + [resp],
@@ -451,7 +450,20 @@ def main():
             {
                 "name": "generate",
                 "kind": "llm",
-                "config": defualt_chat_node_config,
+                "config": {
+                    # IaC model reference (instead of hardcoding a model string here)
+                    # "model_key": "chat" means: use app_cfg["models"]["chat"]
+                    "model_key": "chat",
+                    "include_history": True,
+                    "history_window": 6, # Make even to make sure of QA pairs in history
+                    "prompt": (
+                        "You are a helpful assistant. Answer the question using the context.\n"
+                        "If the context does not contain the answer, say you don't know.\n\n"
+                        "Context:\n{context}\n\n"
+                        "Question:\n{question}\n\n"
+                        "Answer:"
+                    ),
+                },
             },
         ],
         "edges": [
