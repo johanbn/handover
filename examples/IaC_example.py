@@ -263,6 +263,9 @@ class Orchestrator:
                 history = state.get("messages", [])[-history_window:]
 
             messages = [
+                # remove this SystemMessage? 
+                # Since we have it in the prompt already? Or maybe keep it for extra emphasis?
+                SystemMessage(content="You are a helpful assistant."), 
                 *history,
                 HumanMessage(content=question_and_retrived_context),
             ]
@@ -457,10 +460,16 @@ def main():
                     "include_history": True,
                     "history_window": 6, # Make even to make sure of QA pairs in history
                     "prompt": (
-                        "You are a helpful assistant. Answer the question using the context.\n"
-                        "If the context does not contain the answer, say you don't know.\n\n"
-                        "Context:\n{context}\n\n"
-                        "Question:\n{question}\n\n"
+                        "You are a helpful assistant.\n\n"
+                        "You may use BOTH:\n"
+                        "1) The retrieved context below\n"
+                        "2) The prior conversation history\n\n"
+                        "Rules:\n"
+                        "- For factual questions, rely on the retrieved context.\n"
+                        "- For questions about the user or prior conversation, rely on the conversation history.\n"
+                        "- If the answer cannot be found in either, say you don't know.\n\n"
+                        "Retrieved Context:\n{context}\n\n"
+                        "Current Question:\n{question}\n\n"
                         "Answer:"
                     ),
                 },
