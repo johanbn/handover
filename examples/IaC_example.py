@@ -263,9 +263,6 @@ class Orchestrator:
                 history = state.get("messages", [])[-history_window:]
 
             messages = [
-                # remove this SystemMessage? 
-                # Since we have it in the prompt already? Or maybe keep it for extra emphasis?
-                SystemMessage(content="You are a helpful assistant."), 
                 *history,
                 HumanMessage(content=question_and_retrived_context),
             ]
@@ -284,8 +281,6 @@ class Orchestrator:
                 history = state.get("messages", [])[-history_window:]
 
             resp = llm.invoke(messages)
-
-            # Return ONLY what this node updates
             return {
                 "answer": getattr(resp, "content", ""),  # "" if content is missing or None
                 "messages": state["messages"] + [resp],
