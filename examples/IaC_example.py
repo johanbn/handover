@@ -288,7 +288,6 @@ class Orchestrator:
             print("type:", type(resp))
             print("********************")
 
-             # Return ONLY what this node updates
             return {
                 "answer": getattr(resp, "content", ""),  # "" if content is missing or None
                 "messages": state["messages"] + [resp],
@@ -456,14 +455,7 @@ def main():
             {
                 "name": "generate",
                 "kind": "llm",
-                "config": {
-                    # IaC model reference (instead of hardcoding a model string here)
-                    # "model_key": "chat" means: use app_cfg["models"]["chat"]
-                    "model_key": "chat",
-                    "include_history": True,
-                    "history_window": 6, # Make even to make sure of QA pairs in history
-                    "prompt": prompt["prompt"],
-                },
+                "config": defualt_chat_node_config,
             },
         ],
         "edges": [
