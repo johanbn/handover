@@ -281,6 +281,14 @@ class Orchestrator:
                 history = state.get("messages", [])[-history_window:]
 
             resp = llm.invoke(messages)
+
+            print("********************")
+            print("RESPONSE from LLM:")
+            print(resp)
+            print("type:", type(resp))
+            print("********************")
+
+             # Return ONLY what this node updates
             return {
                 "answer": getattr(resp, "content", ""),  # "" if content is missing or None
                 "messages": state["messages"] + [resp],
