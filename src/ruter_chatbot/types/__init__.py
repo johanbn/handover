@@ -1,0 +1,1 @@
+'''Contains type definitions for pydantic BaseModels.'''

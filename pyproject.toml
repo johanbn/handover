@@ -4,4 +4,24 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
+dependencies = [
+    "atlassian-python-api>=4.0.7",
+    "chromadb>=1.5.2",
+    "langchain-community>=0.4.1",
+    "langchain-core>=1.2.16",
+    "langchain-ollama>=1.0.1",
+    "langgraph>=1.0.10",
+    "lxml>=6.0.2",
+]
+
+[dependency-groups]
+dev = ["notebook>=7.5.4"]
+prod = ["fastapi>=0.135.1", "uvicorn>=0.41.0"]
 dependencies = []
+
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[tool.setuptools.packages.find]
+where = ["src"]

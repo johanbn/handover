@@ -1,0 +1,1 @@
+'''Contains IaC definitions of project architecture - instances of types from types.iac.'''

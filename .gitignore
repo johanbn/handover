@@ -1,0 +1,15 @@
+# Python
+dist/
+build/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# VSCode
+.vscode/
+
+# Local development state
+.local/
+
+# Local installs of uv packages
+uv.toml
