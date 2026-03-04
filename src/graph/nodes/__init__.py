@@ -1,1 +1,0 @@
-'''Contains node-generators for the graph-directory.'''
