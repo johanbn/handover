@@ -1,0 +1,1 @@
+Denne teksten brukes for å teste FAISS vector store refresh.
