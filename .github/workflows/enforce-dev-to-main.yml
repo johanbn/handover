@@ -1,0 +1,17 @@
+name: Enforce dev -> main only
+
+on:
+  pull_request:
+
+jobs:
+  only-dev:
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless PR comes from dev
+        run: |
+          echo "base=${{ github.base_ref }} head=${{ github.head_ref }}"
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "Only PRs from 'dev' may target 'main'."
+            exit 1
+          fi
