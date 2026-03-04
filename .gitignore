@@ -10,7 +10,6 @@ __pycache__/
 
 # Local development state
 .local/
-src/ruter_chatbot/**
 
 # Local installs of uv packages
 uv.toml
