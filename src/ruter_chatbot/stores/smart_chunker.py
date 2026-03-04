@@ -1,24 +1,21 @@
 import copy
-import math
 from langchain_core.documents import Document
+
+from ruter_chatbot.types.iac.smart_chunker_spec import SmartChunkerSpec
 
 class SmartChunker:
     def __init__(
         self,
         max_chunk_size=1000,
-        overlap=200,
+        max_overlap=200,
         semantic_min=120,
         tolerance=0.2,
         separators=None,
-        _depth=0,
-        _max_depth=3, # runaway recursion-protection
     ):
         self.max_chunk_size = max_chunk_size
-        self.overlap = overlap
+        self.max_overlap = max_overlap
         self.semantic_min = semantic_min
         self.tolerance = tolerance
-        self._depth = _depth
-        self._max_depth = _max_depth
         self.separators = separators or [
             "\n\n",
             "\n",
@@ -30,140 +27,31 @@ class SmartChunker:
         self,
         text: str
     ) -> list[str]:
-        n = len(text)
-        if n <= self.max_chunk_size:
-            return [text]
+        if not text:
+            return []
         
-        stride = self.max_chunk_size - self.overlap
-        chunks_needed = math.ceil((n - self.overlap) / stride)
-        chunk_size = min(self.max_chunk_size, math.ceil(n / chunks_needed))
-        min_chunk = self.overlap + self.semantic_min
-        tolerance = int(chunk_size * self.tolerance)
+        remaining = text
         chunks = []
-        start = 0
-        
-        while start < n:
-            target_end = min(start + chunk_size, n)
-            
-            # tail case
-            if target_end == n:
-                tail = text[start:n]
-                
-                if not chunks:
-                    chunks.append(tail)
-                    break
-                
-                if len(tail) >= min_chunk:
-                    chunks.append(tail)
-                    break
-                
-                # stump handling (len(tail) < min_chunk)
-                prev = chunks[-1]
-                
-                merged = self._safe_concat(prev, tail)
-                if len(merged) <= self.max_chunk_size:
-                    chunks[-1] = merged
-                    break
-                
-                # try local recursion
-                if self._depth < self._max_depth:
-                    merged = self._safe_concat(prev, tail)
-                    sub = SmartChunker(
-                        max_chunk_size=self.max_chunk_size,
-                        overlap=self.overlap,
-                        semantic_min=self.semantic_min,
-                        tolerance=self.tolerance,
-                        separators=self.separators,
-                        _depth=self._depth + 1,
-                        _max_depth=self._max_depth,
-                    ).split(merged)
-                    
-                    if len(sub) >= 2:
-                        chunks[-1] = sub[0]
-                        chunks.extend(sub[1:])
-                    
-                    else: # fallback: accept stump
-                        chunks.append(tail)
+        previous_chunk = ""
 
-                else:
-                    chunks.append(tail)
-                    break
-                
-            split_point = self._find_split(
-                text,
-                start,
-                target_end,
-                chunk_size,
-                min_chunk
+        while remaining:
+            overlap_prefix = self._build_overlap(previous_chunk)
+            chunk_body, consumed = self._build_chunk(
+                remaining,
+                prefix=overlap_prefix
             )
 
-            if split_point <= start:
-                split_point = target_end
-                
-            chunk = text[start:split_point].rstrip()
-                
-            if len(chunk) < min_chunk and chunks:
-                candidate = self._safe_concat(chunks[-1], chunk)
-                    
-                if len(candidate) <= self.max_chunk_size:
-                    chunks[-1] = candidate
-                
-                else:
-                    chunks.append(chunk)
-    
-            else:
-                chunks.append(chunk)
-            
-            start = max(0, split_point - self.overlap)
-                
+            chunk_text = (overlap_prefix + chunk_body).strip()
+
+            if not chunk_text:
+                break
+
+            chunks.append(chunk_text)
+
+            previous_chunk = chunk_text
+            remaining = remaining[consumed:]
+        
         return chunks
-    
-    def _find_split(
-            self,
-            text: str,
-            start: int,
-            target_end: int,
-            chunk_size: int,
-            min_chunk: int
-        ) -> int:
-        search_start = start + min_chunk
-        
-        search_region = text[search_start:target_end]
-        for i, sep in enumerate(self.separators):
-            idx = search_region.rfind(sep)
-            if idx == -1:
-                continue
-            
-            pos = search_start + idx + len(sep)
-            # one-step lookahead
-            if i + 1 < len(self.separators):
-                next_sep = self.separators[i + 1]
-                next_idx = search_region.rfind(next_sep)
-                
-                if next_idx != -1:
-                    next_pos = search_start + next_idx + len(next_sep)
-                    
-                    if next_pos >= pos + int(chunk_size * self.tolerance):
-                        return next_pos
-                
-            return pos
-        
-        return target_end
-    
-    def _safe_concat(
-        self,
-        prev: str,
-        nxt: str
-    ) -> str:
-        if not prev:
-            return nxt
-        
-        if not nxt:
-            return prev
-        
-        needs_space = (prev and not prev[-1].isspace()) and (nxt and not nxt[0].isspace())
-        
-        return (prev + (" " if needs_space else "") + nxt)
     
     def split_documents(
         self,
@@ -181,3 +69,122 @@ class SmartChunker:
                 )
         
         return split_docs
+    
+    @classmethod
+    def from_spec(cls, spec: SmartChunkerSpec) -> "SmartChunker":
+        max_chunk_size = spec.max_chunk_size
+        max_overlap = spec.max_overlap
+        semantic_min = spec.semantic_min
+        tolerance = spec.separators
+        return cls(
+            max_chunk_size=max_chunk_size,
+            max_overlap=max_overlap,
+            semantic_min=semantic_min,
+            tolerance=tolerance
+        )
+
+    # Internals
+
+    def _build_chunk(self, text: str, prefix: str = "") -> tuple[str, int]:
+        """
+        Builds one chunk body from 'text', respecting max_chunk-size
+        including the prefix (overlap).
+        Returns: (chunk_body, characters_consumed_from_text)
+        """
+        remaining_budget = self.max_chunk_size - len(prefix)
+        if remaining_budget <= 0:
+            return "", 0
+        
+        level = 0
+        units = self._split_at_level(text, level)
+
+        chunk_parts = []
+        consumed_chars = 0
+
+        while units:
+            unit = units[0]
+            size = len(unit)
+            
+
+            if size <= remaining_budget: # Unit fits in chunk
+                chunk_parts.append(unit)
+                remaining_budget -= size
+                consumed_chars += size
+                units.pop(0)
+                continue
+
+            # Unit doesn't fit
+            if level + 1 >= len(self.separators):
+                break # atomic level reached
+
+            finer_units = self._split_at_level(unit, level + 1)
+
+            # tolerance check
+            potential_gain = sum(len(u) for u in finer_units)
+            if potential_gain < len(unit) * (1 - self.tolerance):
+                break # not worth descending
+            
+            # replace this unit with its finer units
+            units = finer_units + units[1:]
+            level += 1
+        
+        chunk_body = "".join(chunk_parts)
+
+        # Check against semantic_min
+        if (
+            len(chunk_body) < self.semantic_min
+            and consumed_chars < len(text)
+        ):
+            # try one more descent pass if possible
+            pass # minimal policy for now
+
+        return chunk_body, consumed_chars
+    
+    def _build_overlap(self, previous_chunk: str) -> str:
+        if not previous_chunk or self.max_overlap <= 0:
+            return ""
+        
+        substring = previous_chunk[-self.max_overlap:]
+        level = 0
+        units = self._split_at_level(substring, level)
+        overlap_parts = []
+        remaining_budget = self.max_overlap
+
+        while units:
+            unit = units[-1] # walk backward
+
+            if len(unit) <= remaining_budget:
+                overlap_parts.insert(0, unit)
+                remaining_budget -= len(unit)
+                units.pop()
+                continue
+
+            if level + 1 >= len(self.separators):
+                break
+
+            finer_units = self._split_at_level(unit, level + 1)
+
+            potential_gain = sum(len(u) for u in finer_units)
+            if potential_gain < len(unit) * (1 - self.tolerance):
+                break
+
+            units = units[:-1] + finer_units
+            level += 1
+        
+        return "".join(overlap_parts)
+    
+    def _split_at_level(self, text: str, level: int):
+        if level >= len(self.separators):
+            return [text]
+        
+        separator = self.separators[level]
+        parts = text.split(separator)
+
+        result = []
+        for i, part in enumerate(parts):
+            if i < len(parts) - 1:
+                result.append(part + separator)
+            else:
+                result.append(part)
+        
+        return result
