@@ -1,4 +1,8 @@
 '''
+Defines custom states for Langgraph StateGraphs - not StateSpec.
+Use:
+
+from ruter_chatbot.types.iac.state_spec import *
 '''
 from typing import Annotated
 from pydantic import BaseModel
