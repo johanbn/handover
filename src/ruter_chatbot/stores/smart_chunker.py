@@ -31,7 +31,7 @@ class SmartChunker:
             return []
         
         remaining = text
-        chunks = []
+        chunks: list[str] = []
         previous_chunk = ""
 
         while remaining:
@@ -41,7 +41,7 @@ class SmartChunker:
                 prefix=overlap_prefix
             )
 
-            chunk_text = (overlap_prefix + chunk_body).strip()
+            chunk_text = (overlap_prefix + chunk_body)
 
             if not chunk_text:
                 break
@@ -51,12 +51,16 @@ class SmartChunker:
             previous_chunk = chunk_text
             remaining = remaining[consumed:]
         
-        return chunks
+        return [c.strip() for c in chunks]
     
     def split_documents(
         self,
-        documents: list[Document]
+        documents: list[Document] | Document
     ) -> list[Document]:
+
+        if isinstance(documents, Document):
+            documents = [documents]
+
         split_docs: list[Document] = []
         for doc in documents:
             text = doc.page_content
@@ -75,19 +79,21 @@ class SmartChunker:
         max_chunk_size = spec.max_chunk_size
         max_overlap = spec.max_overlap
         semantic_min = spec.semantic_min
-        tolerance = spec.separators
+        tolerance = spec.tolerance
+        separators = spec.separators
         return cls(
             max_chunk_size=max_chunk_size,
             max_overlap=max_overlap,
             semantic_min=semantic_min,
-            tolerance=tolerance
+            tolerance=tolerance,
+            separators=separators
         )
 
     # Internals
 
     def _build_chunk(self, text: str, prefix: str = "") -> tuple[str, int]:
         """
-        Builds one chunk body from 'text', respecting max_chunk-size
+        Builds one chunk body from 'text', respecting max_chunk_size
         including the prefix (overlap).
         Returns: (chunk_body, characters_consumed_from_text)
         """
@@ -120,8 +126,14 @@ class SmartChunker:
             finer_units = self._split_at_level(unit, level + 1)
 
             # tolerance check
-            potential_gain = sum(len(u) for u in finer_units)
-            if potential_gain < len(unit) * (1 - self.tolerance):
+            potential_gain = 0
+            for u in finer_units:
+                new = len(u)
+                if new + potential_gain > remaining_budget:
+                    break
+                potential_gain += new
+
+            if potential_gain < consumed_chars * self.tolerance:
                 break # not worth descending
             
             # replace this unit with its finer units
@@ -148,14 +160,17 @@ class SmartChunker:
         level = 0
         units = self._split_at_level(substring, level)
         overlap_parts = []
+        consumed_chars = 0
         remaining_budget = self.max_overlap
 
         while units:
             unit = units[-1] # walk backward
 
-            if len(unit) <= remaining_budget:
+            size = len(unit)
+            if size <= remaining_budget:
                 overlap_parts.insert(0, unit)
-                remaining_budget -= len(unit)
+                remaining_budget -= size
+                consumed_chars += size
                 units.pop()
                 continue
 
@@ -164,14 +179,36 @@ class SmartChunker:
 
             finer_units = self._split_at_level(unit, level + 1)
 
-            potential_gain = sum(len(u) for u in finer_units)
-            if potential_gain < len(unit) * (1 - self.tolerance):
+            potential_gain = 0
+            for u in reversed(finer_units):
+                new = len(u)
+                if new + potential_gain > remaining_budget:
+                    break
+                potential_gain += new
+            
+            if potential_gain < consumed_chars * self.tolerance:
                 break
 
             units = units[:-1] + finer_units
             level += 1
         
-        return "".join(overlap_parts)
+        overlap ="".join(overlap_parts)
+
+        # Ensure overlap does not start mid-word.
+        if overlap:
+            # find start of overlap
+            start_idx = len(previous_chunk) - len(overlap)
+            if 0 < start_idx < len(previous_chunk):
+                prev_char = previous_chunk[start_idx - 1]
+                first_char = overlap[0]
+                if first_char.isalnum() and prev_char.isalnum():
+                    # trim until word boundary
+                    cut = 0
+                    while cut < len(overlap) and overlap[cut] not in " ":
+                        cut += 1
+                    overlap = overlap[cut:]
+
+        return overlap
     
     def _split_at_level(self, text: str, level: int):
         if level >= len(self.separators):
