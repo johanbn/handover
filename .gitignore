@@ -12,5 +12,8 @@ __pycache__/
 .local/
 
 # Local installs of uv packages
-uv.toml
 uv.lock
+
+# enviroment variables
+.env
+.secrets
