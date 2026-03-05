@@ -1,0 +1,42 @@
+name: Promote dev -> main
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # Runs daily at 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-dev-to-main
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main with full history
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch dev and fast-forward main to dev (or merge if needed)
+        run: |
+          git fetch origin dev:dev
+
+          # Try fast-forward first
+          git merge --ff-only dev || {
+            echo "Fast-forward failed (diverged history). Falling back to merge commit."
+            git merge --no-ff -m "Promote dev -> main" dev
+          }
+
+      - name: Push updated main
+        run: git push origin main
