@@ -1,7 +1,7 @@
 from pydantic import BaseModel, model_validator
 
-from types.iac.edge_spec import EdgeSpec, SimpleEdgeSpec, RouterEdgeSpec
-from types.iac.node_spec import NodeSpec
+from ruter_chatbot.types.iac.edge_spec import EdgeSpec, SimpleEdgeSpec, RouterEdgeSpec
+from ruter_chatbot.types.iac.node_spec import NodeSpec
 
 class GraphSpec(BaseModel):
     state_key: str

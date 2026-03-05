@@ -1,5 +1,5 @@
 '''Prompts are straightforward and better suited to a registry than a full spec.'''
-from types.iac.prompt_spec import PromptSpec
+from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 
 # example
 naive = PromptSpec(
