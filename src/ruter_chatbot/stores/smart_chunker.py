@@ -2,7 +2,9 @@ import copy
 from langchain_core.documents import Document
 
 from ruter_chatbot.types.iac.smart_chunker_spec import SmartChunkerSpec
+from ruter_chatbot.logger import get_logger
 
+logger = get_logger(__name__)
 class SmartChunker:
     def __init__(
         self,
@@ -12,6 +14,18 @@ class SmartChunker:
         tolerance=0.2,
         separators=None,
     ):
+        approx_min_size = max_overlap + semantic_min
+        if max_chunk_size * 0.9 < approx_min_size:
+            if max_chunk_size < approx_min_size:
+                raise ValueError(
+                    f"SmartChunker: Incompatible parameters: max_chunk_size ({max_chunk_size}) must be larger than max_overlap ({max_overlap}) + semantic_min ({semantic_min})"
+                )
+            logger.warning(
+                "SmartChunker: parameter max_chunk_size (%d) is almost exceeded by max_overlap (%d) + semantic_min (%d). This compromises chunk quality; Consider changing parameter values.",
+                max_chunk_size,
+                max_overlap,
+                semantic_min
+            )
         self.max_chunk_size = max_chunk_size
         self.max_overlap = max_overlap
         self.semantic_min = semantic_min
@@ -30,27 +44,28 @@ class SmartChunker:
         if not text:
             return []
         
+        if len(text) < self.max_chunk_size:
+            return [text]
+        
         remaining = text
-        chunks: list[str] = []
-        previous_chunk = ""
+        bodies: list[str] = []
+        prefixes: list[str] = []
 
         while remaining:
-            overlap_prefix = self._build_overlap(previous_chunk)
-            chunk_body, consumed = self._build_chunk(
+            new_overlap = self._build_overlap(bodies[-1]) if bodies else ""
+            new_body, consumed = self._build_chunk(
                 remaining,
-                prefix=overlap_prefix
+                prefix=new_overlap
             )
 
-            chunk_text = (overlap_prefix + chunk_body)
-
-            if not chunk_text:
+            if not new_body:
                 break
 
-            chunks.append(chunk_text)
-
-            previous_chunk = chunk_text
+            bodies.append(new_body)
+            prefixes.append(new_overlap)
             remaining = remaining[consumed:]
-        
+
+        chunks = [p + b for p, b in zip(bodies, prefixes, strict=True)]
         return [c.strip() for c in chunks]
     
     def split_documents(
@@ -125,30 +140,23 @@ class SmartChunker:
 
             finer_units = self._split_at_level(unit, level + 1)
 
-            # tolerance check
-            potential_gain = 0
-            for u in finer_units:
-                new = len(u)
-                if new + potential_gain > remaining_budget:
-                    break
-                potential_gain += new
+            if consumed_chars > self.semantic_min:
+                # tolerance check
+                potential_gain = 0
+                for u in finer_units:
+                    new = len(u)
+                    if new + potential_gain > remaining_budget:
+                        break
+                    potential_gain += new
 
-            if potential_gain < consumed_chars * self.tolerance:
-                break # not worth descending
+                if potential_gain < consumed_chars * self.tolerance:
+                    break # not worth descending
             
             # replace this unit with its finer units
             units = finer_units + units[1:]
             level += 1
         
         chunk_body = "".join(chunk_parts)
-
-        # Check against semantic_min
-        if (
-            len(chunk_body) < self.semantic_min
-            and consumed_chars < len(text)
-        ):
-            # try one more descent pass if possible
-            pass # minimal policy for now
 
         return chunk_body, consumed_chars
     
