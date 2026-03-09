@@ -50,17 +50,3 @@ class FileSystemProvider(BaseProvider):
                     "doc_id": f"{source.location}#chunk-{i}",
                 },
             )
-
-    def has_changed(
-        self,
-        source: Source,
-        *,
-        since: Optional[Mapping[str, Any]] = None,
-    ) -> bool:
-        if since is None:
-            return True
-
-        return (
-            since.get("mtime_ns") != source.meta.get("mtime_ns")
-            or since.get("size") != source.meta.get("size")
-        )

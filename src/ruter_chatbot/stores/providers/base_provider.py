@@ -47,8 +47,27 @@ class BaseProvider(ABC):
         cls._PLUGINS_LOADED = True
 
     @classmethod
-    def from_spec(cls, spec: Mapping[str, Any] | ProviderSpec) -> "BaseProvider":
-        spec_obj = spec if isinstance(spec, ProviderSpec) else ProviderSpec.model_validate(spec)
+    def from_spec(
+        cls,
+        spec: Mapping[str, Any]
+        | ProviderSpec
+        | Sequence[Mapping[str, Any] | ProviderSpec],
+    ) -> BaseProvider:
+        if isinstance(spec, Sequence) and not isinstance(
+            spec, (str, bytes, bytearray, Mapping)
+        ):
+            return cls.from_spec(
+                {
+                    "type": "composite",
+                    "args": {
+                        "providers": list(spec),
+                    },
+                }
+            )
+
+        spec_obj = (
+            spec if isinstance(spec, ProviderSpec) else ProviderSpec.model_validate(spec)
+        )
         key = spec_obj.type
 
         if key not in cls.REGISTRY:
@@ -82,7 +101,22 @@ class BaseProvider(ABC):
         pass
 
     def _post_list_sources(self, sources: Sequence[Source]) -> list[Source]:
-        return list(sources)
+        stamped_sources: list[Source] = []
+
+        for source in sources:
+            meta = dict(source.meta)
+            meta["provider_type"] = self.provider_type
+            meta["provider_id"] = self.provider_id
+
+            stamped_sources.append(
+                Source(
+                    type=source.type,
+                    location=source.location,
+                    meta=meta,
+                )
+            )
+
+        return stamped_sources
 
     @abstractmethod
     def _iter_sources(self) -> Iterator[Source]:
@@ -119,13 +153,4 @@ class BaseProvider(ABC):
 
     @abstractmethod
     def _iter_docs_from_source(self, source: Source) -> Iterator[Document]:
-        ...
-
-    @abstractmethod
-    def has_changed(
-        self,
-        source: Source,
-        *,
-        since: Optional[Mapping[str, Any]] = None,
-    ) -> bool:
         ...
