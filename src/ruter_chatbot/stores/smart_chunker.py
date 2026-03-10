@@ -133,7 +133,7 @@ class SmartChunker:
                 new_target = max(self.semantic_min + self.max_overlap, new_target)
                 new_target = min(self.max_chunk_size, new_target)
 
-                target_size = int((new_target + new_target) / 2)
+                target_size = int((new_target + target_size) / 2)
 
             new_overlap = self._build_overlap(bodies[-1]) if bodies else ""
 
@@ -264,7 +264,7 @@ class SmartChunker:
                 lower_bound = target_body_size * (1 - self.tolerance)
 
                 if consumed >= target_body_size:
-                    if projected > upper_bound or consumed:
+                    if projected > upper_bound:
                         break
 
                 if consumed > lower_bound and consumed > self.semantic_min:
