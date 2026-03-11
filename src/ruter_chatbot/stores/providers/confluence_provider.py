@@ -187,17 +187,3 @@ class ConfluenceProvider(BaseProvider):
                 page_content=doc.page_content,
                 metadata=metadata,
             )
-
-if __name__ == "__main__":
-    spec = {
-        "type": "confluence",
-        "args": {
-            "base_url": "https://ruteras.atlassian.net",
-            "space_keys": ["KS"]
-        }
-    }
-    prov = BaseProvider.from_spec(spec)
-    pages = prov.list_sources()
-    print(f"Got {len(pages)} Sources.")
-    sample_docs = prov.get_docs_from_source(pages[0])
-    print(sample_docs)
