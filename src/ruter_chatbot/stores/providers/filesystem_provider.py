@@ -7,7 +7,7 @@ from typing import Any, Iterator, Mapping, Optional
 from langchain_core.documents import Document
 
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
-from ruter_chatbot.types.source_spec import Source
+from ruter_chatbot.types.source import Source
 
 
 @BaseProvider.register("filesystem")

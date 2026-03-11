@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterator, Mapping, Optional, Sequence, Type
 from langchain_core.documents import Document
 
 from ruter_chatbot.types.iac.provider_spec import ProviderSpec
-from ruter_chatbot.types.source_spec import Source
+from ruter_chatbot.types.source import Source
 
 
 class BaseProvider(ABC):
