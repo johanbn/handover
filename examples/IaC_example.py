@@ -54,13 +54,13 @@ from __future__ import annotations
 import os
 import re
 import json
-from typing import Any, Callable, Literal, TypedDict
+from typing import Any, Callable, Literal, TypedDict, Optional
 
 from langchain_core.documents import Document
-from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage, BaseMessage
+from langchain_core.messages import AnyMessage, HumanMessage
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langgraph.graph import StateGraph, START, END
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma, FAISS
 
 
 # -----------------------------
@@ -92,14 +92,6 @@ class EdgeSpec(TypedDict):
     source: str
     target: str
 
-class PromptSpec(TypedDict):
-    prompt: str
-
-class ChatNodeConfig(TypedDict):
-    model_key: dict[str, str]  # Reference to a model in AppConfig.models
-    include_history: bool
-    history_window: int
-    prompt: PromptSpec
 
 class GraphSpecification(TypedDict):
     nodes: list[NodeSpec]
@@ -108,20 +100,46 @@ class GraphSpecification(TypedDict):
 
 
 # -----------------------------
-# IaC App Config (models + runtime knobs)
-# This is the place a new user should edit to swap models, etc.
-# (No env overrides in this version; pure IaC defaults.)
+# Vector store setup
 # -----------------------------
-class ModelConfig(TypedDict):
-    chat: str
-    embed: str
+if True:
+    DEMO_DOCS = [
+        Document(page_content="Auticon is a company focused on employing autistic IT consultants."),
+        Document(page_content="LangGraph is a library for building stateful, multi-step LLM applications as graphs."),
+        Document(page_content="In LangChain, a Document contains page_content and optional metadata."),
+        Document(page_content="Ollama lets you run LLMs locally and exposes a local HTTP API (usually on port 11434)."),
+        Document(page_content="Chroma is a vector database that can run locally and is often used for prototyping RAG."),
+    ]
+else:
+    from confluence_ingest import chunks
+    DEMO_DOCS = chunks
 
 
-class AppConfig(TypedDict):
-    models: ModelConfig
-    top_k: int
-    show_docs: bool
-    draw_graph: bool
+class VectorStore:
+    def __init__(self, spec: dict[str, Any]) -> None:
+        self.vector_factory: dict[str, Callable[[dict[str, Any]], Any]] = {
+            "chroma": self._make_chroma_db,
+            # "faiss": self._make_FAISS_db, # TODO?
+        }
+        self.vector_store = self._build_vector_store(spec)
+
+    def _build_vector_store(self, spec: dict[str, Any]) -> Any:
+        vs_spec = spec["vector_store_spec"]
+        maker = self.vector_factory[vs_spec["vector_store"]]
+        return maker(spec)
+
+    def _make_chroma_db(self, spec: dict[str, Any]) -> Chroma:
+        cfg = dict(spec["vector_store_spec"]["cfg"])  # don’t mutate original
+        cfg["embedding_function"] = OllamaEmbeddings(model=spec["embed_spec"]["name"])
+        cfg["persist_directory"] = os.path.join(os.getcwd(), ".local", cfg["persist_directory"])
+        os.makedirs(cfg["persist_directory"], exist_ok=True)
+        return Chroma(**cfg)
+
+    def similarity_search(self, query: str, k: int = 4):
+        return self.vector_store.similarity_search(query, k=k)
+
+    def add_documents(self, docs):
+        return self.vector_store.add_documents(docs)
 
 
 # -----------------------------
@@ -129,11 +147,10 @@ class AppConfig(TypedDict):
 # -----------------------------
 class Orchestrator:
     def __init__(self, cfg: dict[str, Any]):
-        self.vector_store = cfg["vector_store"]
+        self.cfg = cfg
 
-        # Model registry / IaC-controlled defaults
-        self.models: dict[str, str] = cfg.get("models", {})
-        self.default_model: str = cfg.get("model", self.models.get("chat", "qwen2.5:3b"))
+        # Node config may override this explicitly.
+        self.default_model: str = self.cfg.get("default_model", "qwen2.5:3b")
 
         # Factory pattern for node function builders.
         # Maps node kinds to functions that take a config and return a node function.
@@ -145,6 +162,18 @@ class Orchestrator:
             "prompt": self._make_prompt_node,
             "llm": self._make_llm_node,
         }
+
+        if self.cfg.get("vector_db_spec"):
+            self.vector_stores = self.get_vector_stores(self.cfg["vector_db_spec"]["nodes"])
+
+        if self.cfg.get("graph_spec"):
+            self.graph = self.build_graph(self.cfg["graph_spec"])
+
+    def get_vector_stores(self, spec):
+        d = {}
+        for s in spec:
+            d[s["vector_store_spec"]["name"]] = VectorStore(s)
+        return d
 
     def build_graph(self, graph_spec: GraphSpecification):
         builder = StateGraph(RagState)
@@ -194,9 +223,23 @@ class Orchestrator:
     ) -> Callable[[RagState], dict[str, Any]]:
         k = int(config.get("k", 4))
 
+        # Allow choosing which store to use.
+        # If omitted, we default to "the first configured store".
+        store_name: Optional[str] = config.get("vector_store")
+        if store_name is None:
+            store_name = next(iter(self.vector_stores.keys()), None)
+
+        if not store_name or store_name not in self.vector_stores:
+            raise ValueError(
+                f"Retriever node needs a valid vector_store name. "
+                f"Got {store_name!r}. Available: {list(self.vector_stores.keys())}"
+            )
+
+        store = self.vector_stores[store_name]
+
         def retrieve(state: RagState) -> dict[str, Any]:
             question = state["question"]
-            docs = self.vector_store.similarity_search(question, k=k)
+            docs = store.similarity_search(question, k=k)
             return {"docs": docs}
 
         return retrieve
@@ -217,17 +260,8 @@ class Orchestrator:
         return format_context
 
     def _resolve_model_name(self, config: dict[str, Any]) -> str:
-        """
-        IaC model resolution:
-        - if config has "model": use it directly (explicit override)
-        - else if config has "model_key": look up in orchestrator cfg models (e.g. "chat")
-        - else: fall back to orchestrator default_model
-        """
-        if "model" in config and config["model"]:
-            return str(config["model"])
-        model_key = config.get("model_key")
-        if model_key:
-            return self.models.get(str(model_key), self.default_model)
+        if config.get("model_name"):
+            return str(config["model_name"])
         return self.default_model
 
     def _make_llm_node(
@@ -235,21 +269,11 @@ class Orchestrator:
     ) -> Callable[[RagState], dict[str, Any]]:
         model_name = self._resolve_model_name(config)
         prompt = config["prompt"]
-        # This should support other interfaces eg. HF?? How to resolve if needed?
         llm = ChatOllama(model=model_name)
-        """
-        Ollama and Hugging Face are both pivotal tools in the AI ecosystem,
-        but they serve different primary purposes: Ollama is a tool for easily
-        running LLMs locally, while Hugging Face is the central repository and
-        platform for finding, training, and deploying models.
-        They are often used together: Hugging Face acts as the source for models,
-        which are then downloaded and run locally using Ollama
-
-        Given this post; we maybe can only use Ollama only? Or we are compute bound and need HF?
-        """
 
         include_history = bool(config.get("include_history", True))
         history_window = int(config.get("history_window", 6))
+        debug_prompt = bool(config.get("debug_prompt", False))
 
         def generate(state: RagState) -> dict[str, Any]:
             # string template prompt formatting with {question} and {context}
@@ -267,7 +291,7 @@ class Orchestrator:
                 HumanMessage(content=question_and_retrived_context),
             ]
 
-            if True:
+            if debug_prompt:
                 print("\n--- LLM Prompt ---")
                 for i, m in enumerate(messages):
                     print(f"Content of message {i}:")
@@ -276,17 +300,7 @@ class Orchestrator:
                     print("-----------------------")
                 print("--- End Prompt ---\n")
 
-            history: list[AnyMessage] = []
-            if include_history:
-                history = state.get("messages", [])[-history_window:]
-
             resp = llm.invoke(messages)
-
-            print("********************")
-            print("RESPONSE from LLM:")
-            print(resp)
-            print("type:", type(resp))
-            print("********************")
 
             return {
                 "answer": getattr(resp, "content", ""),  # "" if content is missing or None
@@ -296,62 +310,6 @@ class Orchestrator:
         return generate
 
 
-# -----------------------------
-# Vector store setup
-# -----------------------------
-if True:
-    DEMO_DOCS = [
-        Document(page_content="Auticon is a company focused on employing autistic IT consultants."),
-        Document(page_content="LangGraph is a library for building stateful, multi-step LLM applications as graphs."),
-        Document(page_content="In LangChain, a Document contains page_content and optional metadata."),
-        Document(page_content="Ollama lets you run LLMs locally and exposes a local HTTP API (usually on port 11434)."),
-        Document(page_content="Chroma is a vector database that can run locally and is often used for prototyping RAG."),
-    ]
-else:
-    from confluence_ingest import chunks
-    DEMO_DOCS = chunks
-
-def get_or_build_vector_store(
-    embed_model: str,
-    persist_subdir: str = "chroma_demo",
-) -> Chroma:
-    """
-    Dev-friendly persistent Chroma DB inside .local/
-    - Loads if exists
-    - Builds if missing
-    """
-
-    embeddings = OllamaEmbeddings(model=embed_model)
-
-    # Base .local directory in project root
-    project_root = os.getcwd()
-    local_dir = os.path.join(project_root, ".local")
-    persist_dir = os.path.join(local_dir, persist_subdir)
-
-    # Ensure .local exists
-    os.makedirs(local_dir, exist_ok=True)
-
-    # If DB already exists, load it
-    if os.path.isdir(persist_dir) and os.listdir(persist_dir):
-        print(f"Loading existing vector store from: {persist_dir}")
-        return Chroma(
-            collection_name="demo",
-            embedding_function=embeddings,
-            persist_directory=persist_dir,
-        )
-
-    # Otherwise build and persist
-    print(f"Building new vector store at: {persist_dir}")
-    print(f"Embedding {len(DEMO_DOCS)} documents using model: {embed_model}")
-
-    os.makedirs(persist_dir, exist_ok=True)
-
-    return Chroma.from_documents(
-        documents=DEMO_DOCS,
-        embedding=embeddings,
-        collection_name="demo",
-        persist_directory=persist_dir,
-    )
 # -----------------------------
 # Optional graph visualization
 # -----------------------------
@@ -375,14 +333,10 @@ def draw_graph_png(graph, file_path: str = "graph.png") -> None:
         print("Error:", e)
 
 
-def print_configs(app_cfg: AppConfig, graph_spec: GraphSpecification) -> None:
+def print_spec(spec: dict) -> None:
     print("\n================= IaC APP CONFIG =================")
-    print(json.dumps(app_cfg, indent=2))
+    print(json.dumps(spec, indent=2))
     print("==================================================")
-
-    print("\n================= GRAPH SPEC =====================")
-    print(json.dumps(graph_spec, indent=2))
-    print("==================================================\n")
 
 
 # -----------------------------
@@ -390,39 +344,33 @@ def print_configs(app_cfg: AppConfig, graph_spec: GraphSpecification) -> None:
 # -----------------------------
 def main():
     # --- Pure IaC defaults (edit here to swap models / knobs) ---
-    # Not so sure if we need both AppConfig and GraphSpecification? Maybe we can merge them?
-    # Or is it nice to have the separation of "runtime configs" vs "graph structure" at least from a
-    # readability perspective?
-    app_cfg: AppConfig = {
-        "models": {
-            "chat": "qwen2.5:3b",
-            "embed": "nomic-embed-text",
-        },
-        "top_k": 6,
+    debug_spec = {  # fix type here
         "show_docs": False,
         "draw_graph": True,
     }
 
-    # IaC-controlled models embedder and retriver setup
-    chat_model = app_cfg["models"]["chat"]
-    embed_model = app_cfg["models"]["embed"]
-    top_k = app_cfg["top_k"]
-    show_docs = app_cfg["show_docs"]
-    draw = app_cfg["draw_graph"]
+    vector_db_spec = {
+        "nodes": [
+            {
+                "embed_spec": {"name": "nomic-embed-text", "type": "ollama"},
+                "vector_store_spec": {
+                    "name": "chroma-nomic",
+                    "vector_store": "chroma",
+                    "cfg": {"persist_directory": "chroma_demo", "collection_name": "demo"},
+                },
+            },
+            {
+                "embed_spec": {"name": "nomic-embed-text", "type": "ollama"},
+                "vector_store_spec": {
+                    "name": "chroma-nomic2",
+                    "vector_store": "chroma",
+                    "cfg": {"persist_directory": "chroma_demo", "collection_name": "demo"},
+                },
+            },
+        ]
+    }
 
-    # This is done on a time scheduele? Eg. once per night? Or on demand.
-    vs = get_or_build_vector_store(embed_model)
-    print("Vector store built and ready.")
-
-    orch = Orchestrator(
-        {
-            "models": app_cfg["models"],
-            "model": chat_model,
-            "vector_store": vs,
-        }
-    )
-
-    defualt_prompt: PromptSpec = {
+    defualt_prompt = {
         "prompt": (
             "You are a helpful assistant.\n\n"
             "You may use BOTH:\n"
@@ -438,19 +386,20 @@ def main():
         )
     }
 
-    defualt_chat_node_config: ChatNodeConfig = {
-                    # IaC model reference (instead of hardcoding a model string here)
-                    # "model_key": "chat" means: use app_cfg["models"]["chat"]
-                    "model_key": "chat",
-                    "include_history": True,
-                    "history_window": 6, # Make even to make sure of QA pairs in history
-                    "prompt": defualt_prompt["prompt"],
-                }
+    defualt_chat_node_config = {
+        "model_name": "qwen2.5:3b",
+        "include_history": True,
+        "history_window": 6,  # Make even to make sure of QA pairs in history
+        "prompt": defualt_prompt["prompt"],
+        # optional, to get your old printouts back
+        "debug_prompt": False,
+    }
 
     graph_spec: GraphSpecification = {
         "nodes": [
             {"name": "extract_question", "kind": "passthrough", "config": {"field": "question"}},
-            {"name": "retrieve", "kind": "retriever", "config": {"k": top_k}},
+            # With multiple vector stores configured, pick one explicitly.
+            {"name": "retrieve", "kind": "retriever", "config": {"k": 6, "vector_store": "chroma-nomic"}},
             {"name": "format_context", "kind": "prompt", "config": {"max_chars": 6000}},
             {
                 "name": "generate",
@@ -466,18 +415,28 @@ def main():
         "compile_args": {},
     }
 
-    print_configs(app_cfg, graph_spec)
+    full_spec = {
+        "vector_db_spec": vector_db_spec,
+        "graph_spec": graph_spec,
+    }
 
-    graph = orch.build_graph(graph_spec)
+    print_spec(full_spec)
+    orch = Orchestrator(full_spec)
 
-    print("--------Type Graph------->", type(graph))
-
-    if draw:
-        draw_graph_png(graph, "graph.png")
+    # Should go into orchestrator?
+    if debug_spec["draw_graph"] and orch.graph is not None:
+        draw_graph_png(orch.graph, "graph.png")
 
     print("\nIaC LangGraph RAG demo. Type a question and press Enter. Type 'exit' to quit.\n")
 
     state: RagState = {"messages": [], "question": "", "docs": [], "context": "", "answer": ""}
+
+    # If you want true "no demo behavior", delete this block.
+    try:
+        for store in orch.vector_stores.values():
+            store.add_documents(DEMO_DOCS)
+    except Exception:
+        pass
 
     while True:
         q = input("You: ").strip()
@@ -488,10 +447,10 @@ def main():
 
         # Only update messages here; the graph updates question/docs/context/answer.
         state = {**state, "messages": state["messages"] + [HumanMessage(content=q)]}
-        out = graph.invoke(state)
+        out = orch.graph.invoke(state)
         state = out
 
-        if show_docs:
+        if debug_spec["show_docs"]:
             print("\n--- Retrieved docs ---")
             for i, d in enumerate(out.get("docs", []), start=1):
                 print(f"{i}. {d.page_content}")

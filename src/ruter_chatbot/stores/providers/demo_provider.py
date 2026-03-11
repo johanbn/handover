@@ -29,7 +29,7 @@ Typical usage:
 def main() -> None:
     data_dir = (Path(__file__).resolve().parent / "data").resolve()
 
-    try_spec = 1
+    try_spec = 3
 
     if try_spec == 1:
         # Explicit composite spec

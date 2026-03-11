@@ -1,9 +1,4 @@
+from ruter_chatbot.types.iac.generic_spec import GenericSpec
 
-from typing import Any, Dict
-
-from pydantic import BaseModel, Field
-
-
-class EmbedSpec(BaseModel):
-    type: str
-    args: Dict[str, Any] = Field(default_factory=dict)
+class EmbedSpec(GenericSpec):
+    pass
