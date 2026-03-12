@@ -1,11 +1,13 @@
 from pydantic import BaseModel, model_validator
 
-from ruter_chatbot.types.iac.edge_spec import EdgeSpec, SimpleEdgeSpec, RouterEdgeSpec
+from ruter_chatbot.types.iac.edge_spec import EdgeSpec, RouterEdgeSpec, SimpleEdgeSpec
 from ruter_chatbot.types.iac.node_spec import NodeSpec
+
 
 class GraphSpec(BaseModel):
     state_key: str
-    '''Key to state registry in specs'''
+    """Key to state registry in specs"""
+
     nodes: list[NodeSpec]
     edges: list[EdgeSpec]
 
@@ -15,7 +17,7 @@ class GraphSpec(BaseModel):
 
         if len(node_names) != len(self.nodes):
             raise ValueError("Duplicate node names detected.")
-        
+
         for edge in self.edges:
             if edge.source not in node_names:
                 raise ValueError(f"Edge source '{edge.source}' not found.")
@@ -25,19 +27,24 @@ class GraphSpec(BaseModel):
                     raise ValueError(
                         f"Edge target '{edge.target}' not found."
                     )
-            
+
             elif isinstance(edge, RouterEdgeSpec):
+                if edge.router_key not in node_names:
+                    raise ValueError(
+                        f"Router node '{edge.router_key}' not found."
+                    )
+
                 for label, target in edge.routes.items():
                     if target not in node_names:
                         raise ValueError(
                             f"Router route '{label}' points to unknown node '{target}'."
                         )
-                
-                if edge.default_target and not edge.default_target in node_names:
+
+                if edge.default_target and edge.default_target not in node_names:
                     raise ValueError(
-                        f"Detected edge with fallback to unknown node: '{edge.default_target}"
+                        f"Detected edge with fallback to unknown node: '{edge.default_target}'"
                     )
-            
+
             else:
                 raise ValueError(f"Invalid edge type detected: {type(edge)}")
 

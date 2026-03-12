@@ -1,5 +1,7 @@
+from typing import Annotated, Literal, Union
+
 from pydantic import BaseModel, Field
-from typing import Literal, Union, Annotated
+
 
 class BaseEdgeSpec(BaseModel):
     kind: str
@@ -12,12 +14,13 @@ class SimpleEdgeSpec(BaseEdgeSpec):
 class RouterEdgeSpec(BaseEdgeSpec):
     kind: Literal["router"]
     router_key: str
-    routes: dict[str, str] # output_value -> target_node
+    routes: dict[str, str]  # output_value -> target_node
     default_target: str | None = None
 
 EdgeSpec = Annotated[
     Union[
         SimpleEdgeSpec,
-        RouterEdgeSpec
-    ], Field(discriminator="kind"),
+        RouterEdgeSpec,
+    ],
+    Field(discriminator="kind"),
 ]

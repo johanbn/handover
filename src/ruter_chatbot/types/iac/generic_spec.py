@@ -1,8 +1,8 @@
-from typing import Any, Dict
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
 class GenericSpec(BaseModel):
     type: str
-    args: Dict[str, Any] = Field(default_factory=dict)
+    args: dict[str, Any] = Field(default_factory=dict)

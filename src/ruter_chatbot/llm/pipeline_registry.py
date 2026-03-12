@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from langchain_ollama import ChatOllama
 
-from ruter_chatbot.llm.model import ModelRegistry
+from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.types.iac.pipeline_spec import PipelineSpec
 
 
 class PipelineRegistry:
-    def __init__(self, model_registry: ModelRegistry):
-        self.model_registry = model_registry
-        self.pipelines: Dict[str, Dict[str, Any]] = {}
+    def __init__(self, models: ModelRegistry) -> None:
+        self.models = models
+        self.pipelines: dict[str, dict[str, Any]] = {}
 
     def from_spec(self, spec: PipelineSpec) -> None:
         if spec.type != "ollama_pipeline":
-            raise KeyError(f"Unsupported pipeline type: {spec.type}")
+            raise ValueError(f"Unsupported pipeline type: {spec.type}")
 
         self.pipelines[spec.key] = {
             "model_key": spec.model_key,
@@ -36,7 +36,7 @@ class PipelineRegistry:
             raise KeyError(f"Unknown pipeline key: {key}")
 
         pipeline = self.pipelines[key]
-        model_entry = self.model_registry.get(pipeline["model_key"])
+        model_entry = self.models.get(pipeline["model_key"])
 
         merged_args = {
             **model_entry["args"],
