@@ -50,16 +50,44 @@ class LLMNode(BaseNode):
         )
 
     def __call__(self, state: RagState) -> dict[str, Any]:
+
         llm = self.pipelines.build(self.pipeline_key)
 
+        # -----------------------------
+        # QUICK RAG HACK
+        # Build context from retrieved docs
+        # -----------------------------
+        docs = getattr(state, "docs", [])
+
+        if docs:
+            context = "\n\n".join(
+                f"[Doc {i+1}]\n{d.page_content}"
+                for i, d in enumerate(docs)
+            )
+        else:
+            context = ""
+
+        # Update state context
+        state.context = context
+
+        # -----------------------------
+        # Render prompt
+        # -----------------------------
         rendered_prompt = self.prompt_template.format(**state.model_dump())
 
+        # -----------------------------
+        # Build message list
+        # -----------------------------
         messages = []
+
         if self.include_history:
             messages.extend(state.messages[-self.history_window:])
 
         messages.append(HumanMessage(content=rendered_prompt))
 
+        # -----------------------------
+        # Call LLM
+        # -----------------------------
         resp = llm.invoke(messages)
 
         return {
