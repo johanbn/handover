@@ -1,7 +1,27 @@
 services:
   notebook:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./src:/app/src
+      - ./notebooks:/app/notebooks
+      - ./examples:/app/examples
+      - ${OLLAMA_HOST_DIR}:/root/.ollama/models # define OLLAMA_HOST_DIR in .env
+    # Ollama from host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8888:8888"
-    volumes:
-      - .:/app
+    env_file:
+      - .env
+    environment:
+      - SECRET_DIR=/run/secrets
+      - OLLAMA_MODELS=/root/.ollama/models
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    secrets:
+      - confluence_token
+
+secrets:
+  confluence_token:
+    file: .secrets/confluence_token.txt

@@ -1,21 +1,30 @@
-FROM python:3.12
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm
 
 WORKDIR /app
 
-# Install uv
-RUN pip install uv
+# Copy dependency data
+COPY pyproject.toml .python-version uv.lock ./
 
 # Put the virtualenv somewhere not covered by the bind mount
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# Copy only lock/config first for caching
-COPY pyproject.toml uv.lock .python-version ./
-
 # Install deps at build time into /opt/venv
-RUN uv sync --frozen
+RUN uv sync --frozen --group dev --no-install-project
 
-# Copy the rest
-COPY . .
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install minimal dependencies needed for ollama - just the CLI
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+      curl \
+      ca-certificates \
+      zstd \
+    && curl -fsSL https://ollama.com/download/ollama-linux-amd64.tar.zst -o /tmp/ollama.tar.zst \
+    && mkdir -p /usr/local/bin \
+    && tar --use-compress-program=zstd -xf /tmp/ollama.tar.zst -C /usr/local/bin --strip-components=1 bin/ollama \
+    && chmod +x /usr/local/bin/ollama \
+    && rm -f /tmp/ollama.tar.zst \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8888
 
