@@ -52,8 +52,8 @@ APP = AppSpec(
                 args={"model": "nomic-embed-text"},
             ),
             chunker=SmartChunkerSpec(
-                max_chunk_size=400,
-                max_overlap=200,
+                max_chunk_size=1000,
+                max_overlap=30,
                 semantic_min=120,
                 tolerance=0.2,
             ),
