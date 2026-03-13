@@ -79,7 +79,7 @@ class SmartChunker:
         if max_overlap > 0.40 * max_chunk_size:
             logger.warning(
                 "High overlap (%s of chunk size) → high redundancy expected. "
-                "Consider reducing max_overlap unless you have very strong reasons.",
+                "Consider reducing max_overlap for more effective coverage.",
                 (max_overlap / max_chunk_size) * 100
             )
 

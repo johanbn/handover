@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
-from ruter_chatbot.specs.providers import ruterwiki_ks
+from ruter_chatbot.specs.providers import ruterwiki_ks_extern, ruterwiki_ks_intern
 
 """
 Base abstractions for content providers.
@@ -73,12 +73,12 @@ def main() -> None:
                     "glob": "*.md",
                 },
             },
-            ruterwiki_ks
+            ruterwiki_ks_extern
         ]
 
     elif try_spec == 3:
         # Single provider
-        spec = ruterwiki_ks
+        spec = ruterwiki_ks_intern
 
     provider = BaseProvider.from_spec(spec)
 
