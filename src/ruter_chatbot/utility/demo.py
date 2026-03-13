@@ -20,6 +20,7 @@ APP = AppSpec(
 
 async def main() -> None:
     # example of changing parameter to APP.
+    APP.pipelines["qwen_small_precise"].args["temperature"] = 0.7
     APP.vector_stores["ruter_store"].chunker.max_chunk_size = 800
     orch = Orchestrator(APP)
 
