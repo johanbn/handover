@@ -204,7 +204,7 @@ class VectorStore:
         docs: list[Document] = []
         ids: list[str] = []
 
-        for source in tqdm(sources[:20]):
+        for source in tqdm(sources):
             source_docs: list[Document] = self.provider.get_docs_from_source(source)
 
             chunk_counter = 0
@@ -231,7 +231,7 @@ class VectorStore:
                 f"VectorStore '{self.name}' could not build index: no documents found"
             )
         print(len(docs))
-        return FAISS.from_documents(docs[:10], self.embeddings, ids=ids[:10])
+        return FAISS.from_documents(docs, self.embeddings, ids=ids)
 
     def start_daily_refresh_loop(
         self, hour: int = 4, minute: int = 30

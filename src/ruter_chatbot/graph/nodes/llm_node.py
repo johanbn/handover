@@ -88,7 +88,6 @@ class LLMNode(BaseNode):
         logger.debug("Invoking LLM with %d messages", len(llm_messages))
         
         
-        print(llm_messages)
         resp = llm.invoke(llm_messages)
 
         return {
