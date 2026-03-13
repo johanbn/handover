@@ -1,4 +1,5 @@
-'''Prompts are straightforward and better suited to a registry than a full spec.'''
+"""Prompts are straightforward and better suited to a registry than a full spec."""
+
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 
 
@@ -37,6 +38,51 @@ Brukere vet ikke om kontekst, men setter gjerne pris på at jeg forklarer tydeli
 Spørsmål: {question}
 
 Kontekst: {context}
+
+Svar:""",
+)
+
+intent_prompt = PromptSpec(
+    key="intent_prompt",
+    template="""\
+Du er en rutingsklassifiserer for en Ruter-chatbot.
+
+Oppgave:
+Bestem om brukerens spørsmål skal routes til:
+- search: når svaret bør baseres på dokumenter eller kunnskap hentet fra retriever
+- chat: når spørsmålet kan besvares uten dokumenthenting
+
+Regler:
+- Returner nøyaktig ett ord.
+- Gyldige svar er kun:
+search
+chat
+- Ikke skriv noe annet.
+- Hvis du er i tvil, svar search.
+
+Spørsmål:
+{question}
+
+Svar:""",
+)
+
+rag_prompt = PromptSpec(
+    key="rag_prompt",
+    template="""\
+Du er en hjelpsom og presis kundeserviceassistent for Ruter.
+
+Regler:
+- Svar direkte på spørsmålet.
+- Bruk informasjonen i konteksten som hovedkilde.
+- Hvis konteksten ikke inneholder nok informasjon, si det tydelig.
+- Ikke finn på detaljer som ikke støttes av konteksten.
+- Svar på samme språk som brukeren.
+
+Spørsmål:
+{question}
+
+Kontekst:
+{context}
 
 Svar:""",
 )
@@ -88,9 +134,12 @@ PROMPTS: dict[str, PromptSpec] = {
     naive.key: naive,
     concise.key: concise,
     first_person_informative_chatbot_norwegian.key: first_person_informative_chatbot_norwegian,
+    intent_prompt.key: intent_prompt,
+    rag_prompt.key: rag_prompt,
     route_aware_rag_norwegian.key: route_aware_rag_norwegian,
 }
-'''
+
+"""
 May be more of a registry. Holds known prompt templates, keyed by name.
 If the key exists here, it can be used by a Graph through a GraphSpec.
-'''
+"""

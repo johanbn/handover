@@ -15,7 +15,7 @@ APP = AppSpec(
     pipelines=PIPELINES,
     prompts=PROMPTS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPH["demo"]
+    graph=GRAPH["conditional_demo"]
 )
 
 async def main() -> None:

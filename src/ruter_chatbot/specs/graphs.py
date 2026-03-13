@@ -1,6 +1,10 @@
 from ruter_chatbot.types.iac.graph_spec import GraphSpec
-from ruter_chatbot.types.iac.node_spec import LLMNodeSpec, RetrieverNodeSpec
-from ruter_chatbot.types.iac.edge_spec import SimpleEdgeSpec
+from ruter_chatbot.types.iac.node_spec import (
+    LLMNodeSpec,
+    RetrieverNodeSpec,
+    ConditionalNodeSpec,
+)
+from ruter_chatbot.types.iac.edge_spec import SimpleEdgeSpec, RouterEdgeSpec
 
 GRAPH = {
     "demo": GraphSpec(
@@ -13,8 +17,6 @@ GRAPH = {
                 top_k=5,
                 output_key="docs",
             ),
-
-            # Default answer node
             LLMNodeSpec(
                 name="generate_answer",
                 kind="llm",
@@ -23,8 +25,6 @@ GRAPH = {
                 include_history=False,
                 output_key="answer",
             ),
-
-            # Optional alternative answer nodes
             LLMNodeSpec(
                 name="generate_fast_answer",
                 kind="llm",
@@ -59,6 +59,49 @@ GRAPH = {
             #     source="retrieve_docs",
             #     target="generate_strict_answer",
             # ),
+        ],
+    ),
+    "conditional_demo": GraphSpec(
+        state_key="structured_rag",
+        nodes=[
+            LLMNodeSpec(
+                name="intent_classifier",
+                kind="llm",
+                pipeline_key="qwen_precise",
+                prompt_key="intent_prompt",
+                output_key="route",
+            ),
+            RetrieverNodeSpec(
+                name="retrieve_docs",
+                kind="retriever",
+                store_key="ruter_store",
+                top_k=5,
+                output_key="docs",
+            ),
+            LLMNodeSpec(
+                name="generate_answer",
+                kind="llm",
+                pipeline_key="qwen_precise",
+                prompt_key="rag_prompt",
+                output_key="answer",
+            ),
+        ],
+        edges=[
+            RouterEdgeSpec(
+                kind="router",
+                source="intent_classifier",
+                router_key="intent_classifier",
+                routes={
+                    "search": "retrieve_docs",
+                    "chat": "generate_answer",
+                },
+                default_target="generate_answer",
+            ),
+            SimpleEdgeSpec(
+                kind="simple",
+                source="retrieve_docs",
+                target="generate_answer",
+            ),
         ],
     ),
 }
