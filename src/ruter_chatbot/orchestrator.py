@@ -1,21 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
-
 from langgraph.graph import END, START, StateGraph
 
 from ruter_chatbot.graph.node_registry import NodeRegistry
 from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
-
+from ruter_chatbot.types.iac.app_spec import AppSpec
 from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
-from ruter_chatbot.types.iac.graph_spec import GraphSpec
-from ruter_chatbot.types.iac.model_spec import ModelSpec
-from ruter_chatbot.types.iac.pipeline_spec import PipelineSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
-from ruter_chatbot.types.iac.vector_store_spec import VectorStoreSpec
 
 
 STATE_TYPES = {
@@ -24,8 +18,8 @@ STATE_TYPES = {
 
 
 class Orchestrator:
-    def __init__(self, cfg: dict[str, Any]) -> None:
-        self.cfg = cfg
+    def __init__(self, spec: AppSpec) -> None:
+        self.spec = spec
 
         self.models = ModelRegistry()
         self.pipelines = PipelineRegistry(self.models)
@@ -40,48 +34,29 @@ class Orchestrator:
 
         self._load_specs()
 
-        self.graph = None
-        if "graph" in self.cfg:
-            self.graph = self.build_graph(GraphSpec.model_validate(self.cfg["graph"]))
-
+        self.graph = self.build_graph(self.spec.graph)
         self.state = RagState()
 
     def _load_specs(self) -> None:
-        for item in self.cfg.get("models", []):
-            if isinstance(item, ModelSpec):
-                self.models.from_spec(item)
-            else:
-                self.models.from_spec(ModelSpec.model_validate(item))
+        for model_spec in self.spec.models.values():
+            self.models.from_spec(model_spec)
 
-        for item in self.cfg.get("pipelines", []):
-            if isinstance(item, PipelineSpec):
-                self.pipelines.from_spec(item)
-            else:
-                self.pipelines.from_spec(PipelineSpec.model_validate(item))
+        for pipeline_spec in self.spec.pipelines.values():
+            self.pipelines.from_spec(pipeline_spec)
 
-        for item in self.cfg.get("prompts", []):
-            spec = item if isinstance(item, PromptSpec) else PromptSpec.model_validate(item)
-            self.prompts[spec.key] = spec
+        for prompt_spec in self.spec.prompts.values():
+            self.prompts[prompt_spec.key] = prompt_spec
 
-        for item in self.cfg.get("vector_stores", []):
-            if isinstance(item, VectorStoreSpec):
-                self.vector_stores.from_spec(item)
-            else:
-                self.vector_stores.from_spec(VectorStoreSpec.model_validate(item))
+        for vector_store_spec in self.spec.vector_stores.values():
+            self.vector_stores.from_spec(vector_store_spec)
 
-        graph_spec = (
-            self.cfg["graph"]
-            if isinstance(self.cfg["graph"], GraphSpec)
-            else GraphSpec.model_validate(self.cfg["graph"])
-        )
-
-        for node_spec in graph_spec.nodes:
+        for node_spec in self.spec.graph.nodes:
             self.nodes.from_spec(node_spec)
 
     async def initialize(self) -> None:
         await self.vector_stores.initialize_all()
 
-    def build_graph(self, graph_spec: GraphSpec):
+    def build_graph(self, graph_spec):
         if graph_spec.state_key not in STATE_TYPES:
             raise KeyError(f"Unknown state_key: {graph_spec.state_key}")
 
@@ -145,12 +120,13 @@ class Orchestrator:
         return builder.compile()
 
     def set_temperature(self, pipeline_key: str, value: float) -> None:
+        if pipeline_key not in self.spec.pipelines:
+            raise KeyError(f"Unknown pipeline: {pipeline_key}")
+
+        self.spec.pipelines[pipeline_key].args["temperature"] = value
         self.pipelines.update(pipeline_key, temperature=value)
 
     async def ask(self, question: str) -> str:
-        if self.graph is None:
-            raise RuntimeError("Graph has not been built")
-
         self.state.question = question
         out = self.graph.invoke(self.state)
         self.state = out if isinstance(out, RagState) else RagState.model_validate(out)

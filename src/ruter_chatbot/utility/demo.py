@@ -19,8 +19,8 @@ from ruter_chatbot.specs.providers import ruterwiki_ks
 
 
 APP = AppSpec(
-    models=[
-        ModelSpec(
+    models={
+        "qwen_base": ModelSpec(
             key="qwen_base",
             type="ollama_model",
             args={
@@ -28,20 +28,23 @@ APP = AppSpec(
                 "temperature": 0.2,
             },
         ),
-    ],
-    pipelines=[
-        PipelineSpec(
+    },
+
+    pipelines={
+        "qwen_precise": PipelineSpec(
             key="qwen_precise",
             type="ollama_pipeline",
             model_key="qwen_base",
             args={"temperature": 0.2},
         ),
-    ],
-    prompts=[
-        PROMPTS["naive"],
-    ],
-    vector_stores=[
-        VectorStoreSpec(
+    },
+
+    prompts={
+        "naive": PROMPTS["naive"],
+    },
+
+    vector_stores={
+        "ruter_store": VectorStoreSpec(
             name="ruter_store",
             provider=ruterwiki_ks,
             embedder=EmbedSpec(
@@ -55,7 +58,8 @@ APP = AppSpec(
                 tolerance=0.2,
             ),
         ),
-    ],
+    },
+
     graph=GraphSpec(
         state_key="rag_state",
         nodes=[
@@ -85,9 +89,8 @@ APP = AppSpec(
     ),
 )
 
-
 async def main() -> None:
-    orch = Orchestrator(APP.model_dump())
+    orch = Orchestrator(APP)
 
     print("Initializing vector stores...")
     await orch.initialize()
