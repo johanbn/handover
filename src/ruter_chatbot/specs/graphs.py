@@ -4,7 +4,7 @@ from ruter_chatbot.types.iac.edge_spec import SimpleEdgeSpec
 
 GRAPH = {
     "demo": GraphSpec(
-        state_key="rag_state",
+        state_key="structured_rag",
         nodes=[
             RetrieverNodeSpec(
                 name="retrieve_docs",

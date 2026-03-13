@@ -10,11 +10,7 @@ from ruter_chatbot.types.iac.app_spec import AppSpec
 from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
-
-
-STATE_TYPES = {
-    "rag_state": RagState,
-}
+from ruter_chatbot.specs.state import state_registry
 
 
 class Orchestrator:
@@ -57,10 +53,10 @@ class Orchestrator:
         await self.vector_stores.initialize_all()
 
     def build_graph(self, graph_spec):
-        if graph_spec.state_key not in STATE_TYPES:
+        if graph_spec.state_key not in state_registry:
             raise KeyError(f"Unknown state_key: {graph_spec.state_key}")
 
-        state_type = STATE_TYPES[graph_spec.state_key]
+        state_type = state_registry[graph_spec.state_key]
         builder = StateGraph(state_type)
 
         for node_spec in graph_spec.nodes:
