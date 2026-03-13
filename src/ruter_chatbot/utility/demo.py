@@ -19,6 +19,8 @@ APP = AppSpec(
 )
 
 async def main() -> None:
+    # example of changing parameter to APP.
+    APP.vector_stores["ruter_store"].chunker.max_chunk_size = 800
     orch = Orchestrator(APP)
 
     print("Initializing vector stores...")
