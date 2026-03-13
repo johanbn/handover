@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from ruter_chatbot.logger import get_logger
 from typing import Any
 
 from langchain_core.documents import Document
@@ -12,7 +12,7 @@ from ruter_chatbot.types.iac.node_spec import LLMNodeSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def build_context(docs: list[Document], max_chars_per_doc: int = 10_000) -> str:
