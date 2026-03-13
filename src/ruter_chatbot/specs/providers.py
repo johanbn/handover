@@ -8,6 +8,7 @@ ruterwiki_ks = ProviderSpec(
     type="confluence",
     args={
         "base_url": "https://ruteras.atlassian.net",
-        "space_keys": ["KS"]
+        "space_keys": ["KS"],
+        "include_labels": True
     }
 )

@@ -13,6 +13,9 @@ from langchain_core.documents import Document
 from ruter_chatbot.types.source import Source
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
 from ruter_chatbot.utility.secrets import secrets
+from ruter_chatbot.logger import get_logger
+
+logger = get_logger(__name__)
 
 @BaseProvider.register("confluence")
 class ConfluenceProvider(BaseProvider):
@@ -91,22 +94,34 @@ class ConfluenceProvider(BaseProvider):
         """
 
         if not self.space_keys:
-            raise ValueError(
-                "ConfluenceProivder requires 'space_keys' to avoid scanning entire instance."
+            logger.warning(
+                "ConfluenceProvider is best used with 'space_keys' to avoid scanning entire instance."
             )
+            # request list of spaces
+            data = self._request("GET", "spaces")
         
-        for space_key in self.space_keys:
-            yield from self._iter_space_pages(space_key)
+        else:
+            data = self._request(
+                "GET",
+                "spaces",
+                params={ "keys": self.space_keys }
+            )
+
+        results = data.get("results", [])
+        space_ids: list[str] = [result["id"] for result in results]
+        
+        for space_id in space_ids:
+            yield from self._iter_space_pages(space_id)
         
     
-    def _iter_space_pages(self, space_key: str) -> Iterator[Source]:
+    def _iter_space_pages(self, space_id: str) -> Iterator[Source]:
         """
         Iterate all pages in a space.
         """
 
         path = "pages"
         params: dict[str, Any] = {
-            "spaceKey": space_key,
+            "space-id": [space_id],
             "limit": 100,
             "status": "current" if not self.include_archived_content else "any",
         }
@@ -132,7 +147,7 @@ class ConfluenceProvider(BaseProvider):
                     location=page_url,
                     meta={
                         "page_id": page_id,
-                        "space_key": space_key,
+                        "space_id": space_id,
                         "title": title,
                         "version": version
                     },
