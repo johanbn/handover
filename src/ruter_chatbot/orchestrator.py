@@ -1,21 +1,23 @@
 from __future__ import annotations
 
+from typing import Any
+
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from ruter_chatbot.graph.node_registry import NodeRegistry
 from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
+from ruter_chatbot.specs.state import state_registry
 from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
 from ruter_chatbot.types.iac.app_spec import AppSpec
 from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
-from ruter_chatbot.specs.state import state_registry
 
 
 class Orchestrator:
-    def __init__(self, spec: AppSpec) -> None:
+    def __init__(self, spec: AppSpec, *, enable_memory: bool = False) -> None:
         self.spec = spec
 
         self.models = ModelRegistry()
@@ -31,9 +33,7 @@ class Orchestrator:
 
         self._load_specs()
 
-        # Valgfritt: behold kun hvis dere faktisk trenger stateful samtaler
-        self.checkpointer = MemorySaver()
-
+        self.checkpointer = MemorySaver() if enable_memory else None
         self.graph = self.build_graph(self.spec.graph)
 
     def _load_specs(self) -> None:
@@ -55,7 +55,7 @@ class Orchestrator:
     async def initialize(self) -> None:
         await self.vector_stores.initialize_all()
 
-    def build_graph(self, graph_spec):
+    def build_graph(self, graph_spec: Any):
         if graph_spec.state_key not in state_registry:
             raise KeyError(f"Unknown state_key: {graph_spec.state_key}")
 
@@ -66,22 +66,34 @@ class Orchestrator:
             if getattr(node_spec, "kind", None) != "conditional":
                 builder.add_node(node_spec.name, self.nodes.get(node_spec.name))
 
+        edge_sources: set[str] = set()
+        edge_targets: set[str] = set()
+
         for edge in graph_spec.edges:
+            edge_sources.add(edge.source)
+
             if isinstance(edge, SimpleEdgeSpec):
                 builder.add_edge(edge.source, edge.target)
+                edge_targets.add(edge.target)
+                continue
 
-            elif isinstance(edge, RouterEdgeSpec):
+            if isinstance(edge, RouterEdgeSpec):
                 router = self.nodes.get(edge.router_key)
 
                 path_map = dict(edge.routes)
                 if edge.default_target:
                     path_map["__default__"] = edge.default_target
 
+                edge_targets.update(edge.routes.values())
+                if edge.default_target:
+                    edge_targets.add(edge.default_target)
+
                 def _route_with_default(
-                    state,
+                    state: Any,
+                    *,
                     _router=router,
                     _default=edge.default_target,
-                ):
+                ) -> str | None:
                     result = _router.route(state)
                     if result is None and _default:
                         return "__default__"
@@ -93,39 +105,29 @@ class Orchestrator:
                     path_map=path_map,
                 )
 
-        start_targets = {e.source for e in graph_spec.edges}
-        edge_targets = set()
-
-        for edge in graph_spec.edges:
-            if isinstance(edge, SimpleEdgeSpec):
-                edge_targets.add(edge.target)
-            elif isinstance(edge, RouterEdgeSpec):
-                edge_targets.update(edge.routes.values())
-                if edge.default_target:
-                    edge_targets.add(edge.default_target)
-
-        entry_nodes = start_targets - edge_targets
+        entry_nodes = edge_sources - edge_targets
         if not entry_nodes and graph_spec.nodes:
             entry_nodes = {graph_spec.nodes[0].name}
 
         for entry in entry_nodes:
             builder.add_edge(START, entry)
 
-        all_sources = {e.source for e in graph_spec.edges}
-        leaf_nodes = edge_targets - all_sources
+        leaf_nodes = edge_targets - edge_sources
         for leaf in leaf_nodes:
             builder.add_edge(leaf, END)
 
-        return builder.compile(checkpointer=self.checkpointer)
+        if self.checkpointer is not None:
+            return builder.compile(checkpointer=self.checkpointer)
+
+        return builder.compile()
 
     async def ask(self, question: str, conversation_id: str | None = None) -> str:
-        state = RagState(question=question)
+        input_state = {"question": question}
 
         config = None
         if conversation_id:
             config = {"configurable": {"thread_id": conversation_id}}
 
-        out = await self.graph.ainvoke(state, config=config)
-
+        out = await self.graph.ainvoke(input_state, config=config)
         result = out if isinstance(out, RagState) else RagState.model_validate(out)
         return result.answer
