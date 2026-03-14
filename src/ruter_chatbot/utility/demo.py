@@ -38,13 +38,16 @@ APP = AppSpec(
     pipelines=PIPELINES,
     prompts=PROMPTS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPH["conditional_demo"]
+    graph=GRAPH["aws_demo"] # aws_demo, conditional_demo, demo
 )
 
 async def main() -> None:
     # example of changing parameter to APP.
+
     APP.pipelines["qwen_small_precise"].args["temperature"] = 0.7
-    APP.vector_stores["ruter_store"].chunker.max_chunk_size = 800
+    #APP.vector_stores["ruter_store"].chunker.max_chunk_size = 800
+    print(APP.model_dump_json(indent=4))
+    
     orch = Orchestrator(APP)
     draw_graph_png(orch.graph, "graph.png")
 

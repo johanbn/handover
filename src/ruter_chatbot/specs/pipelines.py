@@ -34,4 +34,12 @@ PIPELINES={
             "temperature": 0.0,
         },
     ),
+    "claude_bedrock_rag": PipelineSpec(
+        key="claude_bedrock_rag",
+        type="chat",
+        model_key="claude_bedrock",
+        args={
+            "temperature": 0.0,
+        },
+    ),
 }

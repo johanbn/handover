@@ -33,4 +33,14 @@ MODELS = {
             "temperature": 0.1,
         },
     ),
+    "claude_bedrock": ModelSpec(
+        key="claude_bedrock",
+        type="bedrock_model",
+        args={
+            "model": "eu.anthropic.claude-sonnet-4-20250514-v1:0",
+            "region_name": "eu-west-1",
+            "temperature": 0.0,
+            "max_tokens": 200,
+        },
+    ),
 }

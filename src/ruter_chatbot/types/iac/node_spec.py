@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class BaseNodeSpec(BaseModel):
-    name: str
+    name: str # unique within Graph.
     output_key: str | None = None
 
 

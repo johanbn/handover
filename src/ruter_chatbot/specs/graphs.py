@@ -48,17 +48,6 @@ GRAPH = {
                 source="retrieve_docs",
                 target="generate_answer",
             ),
-            # Swap target to another node if you want a different default
-            # SimpleEdgeSpec(
-            #     kind="simple",
-            #     source="retrieve_docs",
-            #     target="generate_fast_answer",
-            # ),
-            # SimpleEdgeSpec(
-            #     kind="simple",
-            #     source="retrieve_docs",
-            #     target="generate_strict_answer",
-            # ),
         ],
     ),
     "conditional_demo": GraphSpec(
@@ -101,6 +90,33 @@ GRAPH = {
                 kind="simple",
                 source="retrieve_docs",
                 target="generate_answer",
+            ),
+        ],
+    ),
+    "aws_demo": GraphSpec(
+        state_key="structured_rag",
+        nodes=[
+            RetrieverNodeSpec(
+                name="retrieve_docs_aws",
+                kind="retriever",
+                store_key="ruter_store_aws",
+                top_k=5,
+                output_key="docs",
+            ),
+            LLMNodeSpec(
+                name="generate_answer_aws",
+                kind="llm",
+                pipeline_key="claude_bedrock_rag",
+                prompt_key="rag_prompt",
+                include_history=False,
+                output_key="answer",
+            ),
+        ],
+        edges=[
+            SimpleEdgeSpec(
+                kind="simple",
+                source="retrieve_docs_aws",
+                target="generate_answer_aws",
             ),
         ],
     ),

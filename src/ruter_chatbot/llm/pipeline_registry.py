@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_ollama import ChatOllama
-
 from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.types.iac.pipeline_spec import PipelineSpec
 
@@ -14,10 +12,11 @@ class PipelineRegistry:
         self.pipelines: dict[str, dict[str, Any]] = {}
 
     def from_spec(self, spec: PipelineSpec) -> None:
-        if spec.type != "ollama_pipeline":
+        if spec.type not in {"ollama_pipeline", "bedrock_pipeline", "chat"}:
             raise ValueError(f"Unsupported pipeline type: {spec.type}")
 
         self.pipelines[spec.key] = {
+            "type": spec.type,
             "model_key": spec.model_key,
             "args": dict(spec.args),
         }
@@ -31,16 +30,44 @@ class PipelineRegistry:
             **new_args,
         }
 
-    def build(self, key: str) -> ChatOllama:
+    def build(self, key: str) -> Any:
         if key not in self.pipelines:
             raise KeyError(f"Unknown pipeline key: {key}")
 
         pipeline = self.pipelines[key]
         model_entry = self.models.get(pipeline["model_key"])
 
+        model = model_entry["model"]
+        model_args = dict(model_entry["args"])
+        pipeline_args = dict(pipeline["args"])
+
         merged_args = {
-            **model_entry["args"],
-            **pipeline["args"],
+            **model_args,
+            **pipeline_args,
         }
 
-        return ChatOllama(**merged_args)
+        provider = model_entry.get("provider")
+
+        if provider == "ollama":
+            from langchain_ollama import ChatOllama
+
+            return ChatOllama(**merged_args)
+
+        if provider == "bedrock":
+            import boto3
+            from langchain_aws import ChatBedrockConverse
+
+            region_name = (
+                merged_args.pop("region_name", None)
+                or merged_args.pop("region", None)
+                or "eu-west-1"
+            )
+
+            client = boto3.client("bedrock-runtime", region_name=region_name)
+
+            return ChatBedrockConverse(
+                client=client,
+                **merged_args,
+            )
+
+        raise ValueError(f"Unsupported model provider: {provider}")

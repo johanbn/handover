@@ -4,10 +4,13 @@ from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+import boto3
 from tqdm import tqdm
 
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
+from langchain_aws import BedrockEmbeddings
 from langchain_ollama import OllamaEmbeddings
 
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
@@ -58,26 +61,21 @@ class VectorStore:
 
     @classmethod
     def from_spec(cls, spec: "VectorStoreSpec") -> "VectorStore":
+        print(
+            f"Creating VectorStore "
+            f"name={spec.name} "
+            f"embedder_type={spec.embedder.type} "
+            f"embedder_args={spec.embedder.args}"
+        )
+
         provider = BaseProvider.from_spec(spec.provider)
-
-        embed_type = spec.embedder.type
-        embed_args = spec.embedder.args
-
-        if embed_type != "ollama":
-            raise ValueError(f"Unsupported embedder type: {embed_type}")
-
-        if not embed_args.get("model"):
-            raise ValueError("EmbedSpec.args must include 'model'")
-
-        
-        model_name = embed_args["model"]
-        result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
-        if model_name not in result.stdout:
-            subprocess.run(["ollama", "pull", model_name], check=True)
-
-        embeddings = OllamaEmbeddings(**embed_args)
-
+        embeddings = cls._build_embeddings_from_spec(spec.embedder)
         chunker = SmartChunker.from_spec(spec.chunker)
+
+        print(
+            f"[{spec.name}] Created embeddings instance: "
+            f"{type(embeddings).__name__}"
+        )
 
         return cls(
             name=spec.name,
@@ -85,6 +83,63 @@ class VectorStore:
             embeddings=embeddings,
             chunker=chunker,
         )
+
+    @staticmethod
+    def _build_embeddings_from_spec(embed_spec: "EmbedSpec") -> Any:
+        embed_type = embed_spec.type
+        embed_args = dict(embed_spec.args)
+
+        if embed_type == "ollama":
+            model_name = embed_args.get("model")
+            if not model_name:
+                raise ValueError("EmbedSpec.args must include 'model' for ollama")
+
+            result = subprocess.run(
+                ["ollama", "list"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            if model_name not in result.stdout:
+                subprocess.run(["ollama", "pull", model_name], check=True)
+
+            return OllamaEmbeddings(**embed_args)
+
+        if embed_type == "bedrock":
+            model_id = embed_args.pop("model_id", None)
+            region_name = embed_args.pop("region_name", "eu-west-1")
+            credentials_profile_name = embed_args.pop(
+                "credentials_profile_name",
+                None,
+            )
+
+            if not model_id:
+                raise ValueError(
+                    "EmbedSpec.args must include 'model_id' for bedrock"
+                )
+
+            client_kwargs: dict[str, Any] = {
+                "service_name": "bedrock-runtime",
+                "region_name": region_name,
+            }
+
+            if credentials_profile_name:
+                session = boto3.Session(
+                    profile_name=credentials_profile_name,
+                    region_name=region_name,
+                )
+                client = session.client("bedrock-runtime")
+            else:
+                client = boto3.client(**client_kwargs)
+
+            return BedrockEmbeddings(
+                client=client,
+                model_id=model_id,
+                **embed_args,
+            )
+
+        raise ValueError(f"Unsupported embedder type: {embed_type}")
 
     @property
     def state(self) -> VectorStoreState:
@@ -230,11 +285,18 @@ class VectorStore:
             raise ValueError(
                 f"VectorStore '{self.name}' could not build index: no documents found"
             )
-        print(len(docs))
+
+        print(
+            f"[{self.name}] Building FAISS index with "
+            f"{type(self.embeddings).__name__}: {self.embeddings}"
+        )
+
         return FAISS.from_documents(docs, self.embeddings, ids=ids)
 
     def start_daily_refresh_loop(
-        self, hour: int = 4, minute: int = 30
+        self,
+        hour: int = 4,
+        minute: int = 30,
     ) -> asyncio.Task:
         if self._daily_refresh_task and not self._daily_refresh_task.done():
             raise RuntimeError(
@@ -260,7 +322,7 @@ class VectorStore:
         finally:
             self._daily_refresh_task = None
 
-    async def _daily_refresh_loop(self, hour: int = 4, minute: int = 30) -> None:
+    async def _daily_refresh_loop(self, hour: int, minute: int) -> None:
         try:
             while True:
                 wait_seconds = self._seconds_until_next_refresh(
@@ -323,18 +385,18 @@ if __name__ == "__main__":
 
         from ruter_chatbot.specs.providers import ruterwiki_ks
 
-        # use this provider for quick test 
-        simple_test=ProviderSpec(
+        # use this provider for quick test
+        simple_test = ProviderSpec(
             type="filesystem",
             args={
                 "path": str(data_dir),
                 "glob": "*.txt",
-                }
-            )
-        
+            },
+        )
+
         spec = VectorStoreSpec(
             name="test_store",
-            provider=simple_test, #ruterwiki_ks, # uses ruterwiki
+            provider=simple_test,  # ruterwiki_ks, # uses ruterwiki
             embedder=EmbedSpec(
                 type="ollama",
                 args={
