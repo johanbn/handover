@@ -38,7 +38,7 @@ APP = AppSpec(
     pipelines=PIPELINES,
     prompts=PROMPTS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPH["aws_demo"] # aws_demo, conditional_demo, demo
+    graph=GRAPH["conditional_demo"] # aws_demo, conditional_demo, demo
 )
 
 async def main() -> None:

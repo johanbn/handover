@@ -4,7 +4,11 @@ from ruter_chatbot.types.iac.node_spec import (
     RetrieverNodeSpec,
     ConditionalNodeSpec,
 )
-from ruter_chatbot.types.iac.edge_spec import SimpleEdgeSpec, RouterEdgeSpec
+from ruter_chatbot.types.iac.edge_spec import (
+    SimpleEdgeSpec,
+    RouterEdgeSpec,
+)
+
 
 GRAPH = {
     "demo": GraphSpec(
@@ -48,6 +52,29 @@ GRAPH = {
                 source="retrieve_docs",
                 target="generate_answer",
             ),
+
+            # --- Showcase edges (disabled examples) ---
+            # SimpleEdgeSpec(
+            #     kind="simple",
+            #     source="retrieve_docs",
+            #     target="generate_fast_answer",
+            # ),
+            # SimpleEdgeSpec(
+            #     kind="simple",
+            #     source="retrieve_docs",
+            #     target="generate_strict_answer",
+            # ),
+            # RouterEdgeSpec(
+            #     kind="router",
+            #     source="retrieve_docs",
+            #     router_key="answer_quality_router",
+            #     routes={
+            #         "fast": "generate_fast_answer",
+            #         "strict": "generate_strict_answer",
+            #         "balanced": "generate_answer",
+            #     },
+            #     default_target="generate_answer",
+            # ),
         ],
     ),
     "conditional_demo": GraphSpec(
@@ -59,6 +86,11 @@ GRAPH = {
                 pipeline_key="qwen_precise",
                 prompt_key="intent_prompt",
                 output_key="route",
+            ),
+            ConditionalNodeSpec(
+                name="route_from_state",
+                kind="conditional",
+                field="route",
             ),
             RetrieverNodeSpec(
                 name="retrieve_docs",
@@ -79,7 +111,7 @@ GRAPH = {
             RouterEdgeSpec(
                 kind="router",
                 source="intent_classifier",
-                router_key="intent_classifier",
+                router_key="route_from_state",
                 routes={
                     "search": "retrieve_docs",
                     "chat": "generate_answer",
@@ -91,6 +123,19 @@ GRAPH = {
                 source="retrieve_docs",
                 target="generate_answer",
             ),
+
+            # --- Showcase edges (disabled examples) ---
+            # RouterEdgeSpec(
+            #     kind="router",
+            #     source="intent_classifier",
+            #     router_key="route_from_state",
+            #     routes={
+            #         "search": "retrieve_docs",
+            #         "chat": "generate_answer",
+            #         "smalltalk": "generate_answer",
+            #     },
+            #     default_target="generate_answer",
+            # ),
         ],
     ),
     "aws_demo": GraphSpec(

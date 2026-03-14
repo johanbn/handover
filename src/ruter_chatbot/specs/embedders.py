@@ -1,9 +1,11 @@
 from ruter_chatbot.types.iac.embed_spec import EmbedSpec
 
-EMBEDDER = {
+EMBEDDERS = {
     "nomic-embed-text": EmbedSpec(
         type="ollama",
-        args={"model": "nomic-embed-text"},
+        args={
+            "model": "nomic-embed-text",
+        },
     ),
     "cohere-bedrock-multilingual": EmbedSpec(
         type="bedrock",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from ruter_chatbot.graph.node_registry import NodeRegistry
@@ -30,8 +31,10 @@ class Orchestrator:
 
         self._load_specs()
 
+        # Valgfritt: behold kun hvis dere faktisk trenger stateful samtaler
+        self.checkpointer = MemorySaver()
+
         self.graph = self.build_graph(self.spec.graph)
-        self.state = RagState()
 
     def _load_specs(self) -> None:
         for model_spec in self.spec.models.values():
@@ -113,10 +116,16 @@ class Orchestrator:
         for leaf in leaf_nodes:
             builder.add_edge(leaf, END)
 
-        return builder.compile()
+        return builder.compile(checkpointer=self.checkpointer)
 
-    async def ask(self, question: str) -> str:
-        self.state.question = question
-        out = self.graph.invoke(self.state)
-        self.state = out if isinstance(out, RagState) else RagState.model_validate(out)
-        return self.state.answer
+    async def ask(self, question: str, conversation_id: str | None = None) -> str:
+        state = RagState(question=question)
+
+        config = None
+        if conversation_id:
+            config = {"configurable": {"thread_id": conversation_id}}
+
+        out = await self.graph.ainvoke(state, config=config)
+
+        result = out if isinstance(out, RagState) else RagState.model_validate(out)
+        return result.answer

@@ -31,6 +31,11 @@ MODELS = {
         args={
             "model": "mistral:7b",
             "temperature": 0.1,
+            "top_p": 0.9,
+            "top_k": 40,
+            "repeat_penalty": 1.1,
+            "num_ctx": 4096,
+            "num_predict": 512,
         },
     ),
     "claude_bedrock": ModelSpec(
