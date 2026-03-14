@@ -115,13 +115,6 @@ class Orchestrator:
 
         return builder.compile()
 
-    def set_temperature(self, pipeline_key: str, value: float) -> None:
-        if pipeline_key not in self.spec.pipelines:
-            raise KeyError(f"Unknown pipeline: {pipeline_key}")
-
-        self.spec.pipelines[pipeline_key].args["temperature"] = value
-        self.pipelines.update(pipeline_key, temperature=value)
-
     async def ask(self, question: str) -> str:
         self.state.question = question
         out = self.graph.invoke(self.state)
