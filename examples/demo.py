@@ -44,7 +44,7 @@ APP = AppSpec(
 async def main() -> None:
     # example of changing parameter to APP.
 
-    APP.pipelines["qwen_small_precise"].args["temperature"] = 0.7
+    APP.pipelines["claude_bedrock_rag"].args["temperature"] = 0.2
     #APP.vector_stores["ruter_store"].chunker.max_chunk_size = 800
     print(APP.model_dump_json(indent=4))
     

@@ -85,7 +85,7 @@ GRAPH = {
             LLMNodeSpec(
                 name="intent_classifier",
                 kind="llm",
-                pipeline_key="qwen_precise",
+                pipeline_key="claude_bedrock_rag",
                 prompt_key="intent_prompt",
                 output_key="route",
             ),
@@ -104,7 +104,7 @@ GRAPH = {
             LLMNodeSpec(
                 name="generate_answer",
                 kind="llm",
-                pipeline_key="qwen_precise",
+                pipeline_key="claude_bedrock_rag",
                 prompt_key="rag_prompt",
                 output_key="answer",
             ),

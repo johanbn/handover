@@ -2,32 +2,32 @@ from ruter_chatbot.types.iac.pipeline_spec import PipelineSpec
 
 
 PIPELINES={
-    "qwen_small_precise": PipelineSpec(
-        key="qwen_small_precise",
+    "qwen_small": PipelineSpec(
+        key="qwen_small",
         type="ollama_pipeline",
         model_key="qwen_small",
         args={
             "temperature": 0.1,
         },
     ),
-    "qwen_medium_balanced": PipelineSpec(
-        key="qwen_medium_balanced",
+    "qwen_medium": PipelineSpec(
+        key="qwen_medium",
         type="ollama_pipeline",
         model_key="qwen_medium",
         args={
             "temperature": 0.2,
         },
     ),
-    "llama_fast_creative": PipelineSpec(
-        key="llama_fast_creative",
+    "llama_fast": PipelineSpec(
+        key="llama_fast",
         type="ollama_pipeline",
         model_key="llama_fast",
         args={
             "temperature": 0.5,
         },
     ),
-    "mistral_strict_rag": PipelineSpec(
-        key="mistral_strict_rag",
+    "mistral_precise": PipelineSpec(
+        key="mistral_precise",
         type="ollama_pipeline",
         model_key="mistral_precise",
         args={
