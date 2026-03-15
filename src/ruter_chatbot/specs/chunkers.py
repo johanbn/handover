@@ -10,8 +10,8 @@ from ruter_chatbot.types.iac.smart_chunker_spec import SmartChunkerSpec
 
 CHUNKERS={
     "smart_chunker": SmartChunkerSpec(
-                max_chunk_size=400,
-                max_overlap=30,
+                max_chunk_size=800,
+                max_overlap=50,
                 semantic_min=50,
                 tolerance=0.2,
             ),
