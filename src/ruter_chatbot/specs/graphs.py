@@ -1,4 +1,4 @@
-from ruter_chatbot.types.iac.graph_spec import GraphSpec
+from ruter_chatbot.types.iac.graph_spec import GraphSpec, GraphCompileArgs
 from ruter_chatbot.types.iac.node_spec import (
     LLMNodeSpec,
     RetrieverNodeSpec,
@@ -13,11 +13,12 @@ from ruter_chatbot.types.iac.edge_spec import (
 GRAPH = {
     "demo": GraphSpec(
         state_key="structured_rag",
+        compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
             RetrieverNodeSpec(
                 name="retrieve_docs",
                 kind="retriever",
-                store_key="ruter_store",
+                store_key="ruter_store_aws", # ruter_store
                 top_k=5,
                 output_key="docs",
             ),
@@ -79,6 +80,7 @@ GRAPH = {
     ),
     "conditional_demo": GraphSpec(
         state_key="structured_rag",
+        compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
             LLMNodeSpec(
                 name="intent_classifier",
@@ -95,7 +97,7 @@ GRAPH = {
             RetrieverNodeSpec(
                 name="retrieve_docs",
                 kind="retriever",
-                store_key="ruter_store",
+                store_key="ruter_store_aws", # ruter_store
                 top_k=5,
                 output_key="docs",
             ),
@@ -140,11 +142,12 @@ GRAPH = {
     ),
     "aws_demo": GraphSpec(
         state_key="structured_rag",
+        compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
             RetrieverNodeSpec(
                 name="retrieve_docs_aws",
                 kind="retriever",
-                store_key="ruter_store_aws",
+                store_key="ruter_store_aws", # ruter_store
                 top_k=5,
                 output_key="docs",
             ),

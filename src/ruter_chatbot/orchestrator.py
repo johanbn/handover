@@ -17,7 +17,7 @@ from ruter_chatbot.types.iac.state_spec import RagState
 
 
 class Orchestrator:
-    def __init__(self, spec: AppSpec, *, enable_memory: bool = False) -> None:
+    def __init__(self, spec: AppSpec) -> None:
         self.spec = spec
 
         self.models = ModelRegistry()
@@ -32,8 +32,6 @@ class Orchestrator:
         )
 
         self._load_specs()
-
-        self.checkpointer = MemorySaver() if enable_memory else None
         self.graph = self.build_graph(self.spec.graph)
 
     def _load_specs(self) -> None:
@@ -116,17 +114,24 @@ class Orchestrator:
         for leaf in leaf_nodes:
             builder.add_edge(leaf, END)
 
-        if self.checkpointer is not None:
-            return builder.compile(checkpointer=self.checkpointer)
+        compile_kwargs: dict[str, Any] = {}
+        if graph_spec.compile_args.use_memory:
+            compile_kwargs["checkpointer"] = MemorySaver()
 
-        return builder.compile()
+        return builder.compile(**compile_kwargs)
 
     async def ask(self, question: str, conversation_id: str | None = None) -> str:
-        input_state = {"question": question}
+        if self.spec.graph.compile_args.use_memory and not conversation_id:
+            raise ValueError(
+                "conversation_id is required when graph memory is enabled"
+            )
 
-        config = None
-        if conversation_id:
-            config = {"configurable": {"thread_id": conversation_id}}
+        input_state = {"question": question}
+        config = (
+            {"configurable": {"thread_id": conversation_id}}
+            if conversation_id
+            else None
+        )
 
         out = await self.graph.ainvoke(input_state, config=config)
         result = out if isinstance(out, RagState) else RagState.model_validate(out)

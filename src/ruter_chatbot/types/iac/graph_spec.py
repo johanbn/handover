@@ -1,7 +1,11 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from ruter_chatbot.types.iac.edge_spec import EdgeSpec, RouterEdgeSpec, SimpleEdgeSpec
 from ruter_chatbot.types.iac.node_spec import NodeSpec
+
+
+class GraphCompileArgs(BaseModel):
+    use_memory: bool = False
 
 
 class GraphSpec(BaseModel):
@@ -10,6 +14,7 @@ class GraphSpec(BaseModel):
 
     nodes: list[NodeSpec]
     edges: list[EdgeSpec]
+    compile_args: GraphCompileArgs = Field(default_factory=GraphCompileArgs)
 
     @model_validator(mode="after")
     def validate_graph(self):
@@ -24,15 +29,11 @@ class GraphSpec(BaseModel):
 
             if isinstance(edge, SimpleEdgeSpec):
                 if edge.target not in node_names:
-                    raise ValueError(
-                        f"Edge target '{edge.target}' not found."
-                    )
+                    raise ValueError(f"Edge target '{edge.target}' not found.")
 
             elif isinstance(edge, RouterEdgeSpec):
                 if edge.router_key not in node_names:
-                    raise ValueError(
-                        f"Router node '{edge.router_key}' not found."
-                    )
+                    raise ValueError(f"Router node '{edge.router_key}' not found.")
 
                 for label, target in edge.routes.items():
                     if target not in node_names:

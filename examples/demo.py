@@ -48,7 +48,7 @@ async def main() -> None:
     #APP.vector_stores["ruter_store"].chunker.max_chunk_size = 800
     print(APP.model_dump_json(indent=4))
     
-    orch = Orchestrator(APP, enable_memory=True)
+    orch = Orchestrator(APP)
     draw_graph_png(orch.graph, "graph.png")
 
 
