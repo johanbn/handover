@@ -53,7 +53,8 @@ async def main() -> None:
 
 
     print("Initializing vector stores...")
-    await orch.initialize("ruter_store_aws")
+    # Notice if no args, all db's in VECTOR_STORES is indexed.
+    await orch.initialize("ruter_store_aws") # ruter_store
     print("Ready.\n")
 
     while True:
