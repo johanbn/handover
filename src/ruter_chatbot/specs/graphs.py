@@ -98,7 +98,7 @@ GRAPH = {
                 name="retrieve_docs",
                 kind="retriever",
                 store_key="ruter_store_aws", # ruter_store
-                top_k=5,
+                top_k=30,
                 output_key="docs",
             ),
             LLMNodeSpec(

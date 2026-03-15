@@ -15,6 +15,8 @@ from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
 
+import logging
+logging.getLogger("langchain_aws").setLevel(logging.WARNING)
 
 class Orchestrator:
     def __init__(self, spec: AppSpec) -> None:
