@@ -46,7 +46,6 @@ class LLMNode(BaseNode):
         self.output_key = output_key
         self.include_history = include_history
         self.history_window = history_window
-        self.system_prompt = system_prompt
 
     @classmethod
     def from_spec(
@@ -85,9 +84,6 @@ class LLMNode(BaseNode):
         current_human = HumanMessage(content=rendered_prompt)
 
         llm_messages = []
-        if self.system_prompt:
-            llm_messages.append(SystemMessage(content=self.system_prompt))
-
         llm_messages.extend(history)
         llm_messages.append(current_human)
 
