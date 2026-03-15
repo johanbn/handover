@@ -38,9 +38,15 @@ class RetrievalNode(BaseNode):
         )
 
     def __call__(self, state: RagState) -> dict[str, Any]:
-        docs = self.store.similarity_search(
+        results = self.store.similarity_search(
             state.question,
             k=self.top_k,
             with_score=self.with_score,
         )
+
+        if self.with_score:  # Omitting score
+            docs = [doc for doc, _score in results]
+        else:
+            docs = results
+
         return {self.output_key: docs}
