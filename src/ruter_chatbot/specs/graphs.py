@@ -80,7 +80,7 @@ GRAPH = {
     ),
     "conditional_demo": GraphSpec(
         state_key="structured_rag",
-        compile_args=GraphCompileArgs(use_memory=False),
+        compile_args=GraphCompileArgs(use_memory=True),
         nodes=[
             LLMNodeSpec(
                 name="intent_classifier",

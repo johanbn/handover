@@ -37,7 +37,6 @@ class PipelineRegistry:
         pipeline = self.pipelines[key]
         model_entry = self.models.get(pipeline["model_key"])
 
-        model = model_entry["model"]
         model_args = dict(model_entry["args"])
         pipeline_args = dict(pipeline["args"])
 

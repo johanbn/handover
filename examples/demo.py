@@ -56,7 +56,7 @@ async def main() -> None:
     # Notice if no args, all db's in VECTOR_STORES is indexed.
     await orch.initialize("ruter_store_aws") # ruter_store
     print("Ready.\n")
-
+    conv_id = 1
     while True:
         q = input("You: ").strip()
 
@@ -66,7 +66,7 @@ async def main() -> None:
         if q.lower() in {"exit", "quit"}:
             break
 
-        answer = await orch.ask(q)
+        answer = await orch.ask(q, conv_id)
         print("\nAssistant:", answer)
         print("")
 

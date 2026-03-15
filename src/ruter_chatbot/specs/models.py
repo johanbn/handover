@@ -45,7 +45,7 @@ MODELS = {
             "model": "eu.anthropic.claude-sonnet-4-20250514-v1:0",
             "region_name": "eu-west-1",
             "temperature": 0.0,
-            "max_tokens": 200,
+            "max_tokens": 2000,
         },
     ),
 }

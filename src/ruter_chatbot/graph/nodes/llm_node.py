@@ -38,7 +38,6 @@ class LLMNode(BaseNode):
         output_key: str = "answer",
         include_history: bool = True,
         history_window: int = 5,
-        system_prompt: str | None = None,
     ) -> None:
         self.pipelines = pipelines
         self.prompt_template = prompt_template
