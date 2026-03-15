@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ruter_chatbot.logger import get_logger
 from typing import Any
 
 from langchain_core.documents import Document
@@ -8,6 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from ruter_chatbot.graph.nodes.base import BaseNode
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
+from ruter_chatbot.logger import get_logger
 from ruter_chatbot.types.iac.node_spec import LLMNodeSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
@@ -38,6 +38,7 @@ class LLMNode(BaseNode):
         output_key: str = "answer",
         include_history: bool = True,
         history_window: int = 5,
+        system_prompt: str | None = None,
     ) -> None:
         self.pipelines = pipelines
         self.prompt_template = prompt_template
@@ -45,6 +46,7 @@ class LLMNode(BaseNode):
         self.output_key = output_key
         self.include_history = include_history
         self.history_window = history_window
+        self.system_prompt = system_prompt
 
     @classmethod
     def from_spec(
@@ -80,18 +82,21 @@ class LLMNode(BaseNode):
 
         history = state.messages[-self.history_window:] if self.include_history else []
 
-        llm_messages = [
-            *history,
-            HumanMessage(content=rendered_prompt),
-        ]
+        current_human = HumanMessage(content=rendered_prompt)
+
+        llm_messages = []
+        if self.system_prompt:
+            llm_messages.append(SystemMessage(content=self.system_prompt))
+
+        llm_messages.extend(history)
+        llm_messages.append(current_human)
 
         logger.debug("Invoking LLM with %d messages", len(llm_messages))
-        
-        
+
         resp = llm.invoke(llm_messages)
 
         return {
             "context": context,
             self.output_key: getattr(resp, "content", ""),
-            "messages": [resp],  # let add_messages handle merge
+            "messages": [current_human, resp],
         }
