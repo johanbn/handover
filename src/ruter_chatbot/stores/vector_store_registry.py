@@ -16,6 +16,10 @@ class VectorStoreRegistry:
             raise KeyError(f"Unknown vector store: {name}")
         return self.vector_stores[name]
 
+    async def initialize(self, name: str) -> None:
+        store = self.get(name)
+        await store.initialize()
+
     async def initialize_all(self) -> None:
         for store in self.vector_stores.values():
             await store.initialize()

@@ -53,7 +53,7 @@ async def main() -> None:
 
 
     print("Initializing vector stores...")
-    await orch.initialize()
+    await orch.initialize("ruter_store_aws")
     print("Ready.\n")
 
     while True:
