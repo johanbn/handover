@@ -36,7 +36,7 @@ APP = AppSpec(
     pipelines=PIPELINES,
     prompts=PROMPTS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPHS["demo"],
+    graph=GRAPHS["conditional_demo"],
 )
 
 

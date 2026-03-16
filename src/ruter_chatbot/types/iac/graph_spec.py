@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from ruter_chatbot.types.iac.edge_spec import EdgeSpec, RouterEdgeSpec, SimpleEdgeSpec
 from ruter_chatbot.types.iac.node_spec import NodeSpec
-from ruter_chatbot.types.iac.router_spec import RouterSpec
 
 
 class GraphCompileArgs(BaseModel):
@@ -14,26 +13,15 @@ class GraphSpec(BaseModel):
     """Key to state registry in specs"""
 
     nodes: list[NodeSpec]
-    routers: list[RouterSpec] = Field(default_factory=list)
     edges: list[EdgeSpec]
     compile_args: GraphCompileArgs = Field(default_factory=GraphCompileArgs)
 
     @model_validator(mode="after")
     def validate_graph(self):
         node_names: set[str] = {n.name for n in self.nodes}
-        router_names: set[str] = {r.name for r in self.routers}
 
         if len(node_names) != len(self.nodes):
             raise ValueError("Duplicate node names detected.")
-
-        if len(router_names) != len(self.routers):
-            raise ValueError("Duplicate router names detected.")
-
-        duplicate_names = node_names & router_names
-        if duplicate_names:
-            raise ValueError(
-                f"Names must be unique across nodes and routers. Duplicates: {sorted(duplicate_names)}"
-            )
 
         for edge in self.edges:
             if edge.source not in node_names:
@@ -44,9 +32,6 @@ class GraphSpec(BaseModel):
                     raise ValueError(f"Edge target '{edge.target}' not found.")
 
             elif isinstance(edge, RouterEdgeSpec):
-                if edge.router_key not in router_names:
-                    raise ValueError(f"Router '{edge.router_key}' not found.")
-
                 for label, target in edge.routes.items():
                     if target not in node_names:
                         raise ValueError(

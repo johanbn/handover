@@ -3,9 +3,6 @@ from ruter_chatbot.types.iac.node_spec import (
     LLMNodeSpec,
     RetrieverNodeSpec,
 )
-from ruter_chatbot.types.iac.router_spec import (
-    StateFieldRouterSpec,
-)
 from ruter_chatbot.types.iac.edge_spec import (
     SimpleEdgeSpec,
     RouterEdgeSpec,
@@ -32,45 +29,41 @@ GRAPHS = {
                 include_history=False,
                 output_key="answer",
             ),
-            #LLMNodeSpec(
-            #    name="generate_fast_answer",
-            #    kind="llm",
-            #    pipeline_key="llama_fast",
-            #    prompt_key="naive",
-            #    include_history=False,
-            #    output_key="answer",
-            #),
-            #LLMNodeSpec(
-            #    name="generate_strict_answer",
-            #    kind="llm",
-            #    pipeline_key="mistral_precise",
-            #    prompt_key="route_aware_rag_norwegian",
-            #    include_history=False,
-            #    output_key="answer",
-            #),
+            # LLMNodeSpec(
+            #     name="generate_fast_answer",
+            #     kind="llm",
+            #     pipeline_key="llama_fast",
+            #     prompt_key="naive",
+            #     include_history=False,
+            #     output_key="answer",
+            # ),
+            # LLMNodeSpec(
+            #     name="generate_strict_answer",
+            #     kind="llm",
+            #     pipeline_key="mistral_precise",
+            #     prompt_key="route_aware_rag_norwegian",
+            #     include_history=False,
+            #     output_key="answer",
+            # ),
         ],
         edges=[
             SimpleEdgeSpec(
-                kind="simple",
                 source="retrieve_docs",
                 target="generate_answer",
             ),
 
             # --- Showcase edges (disabled examples) ---
             # SimpleEdgeSpec(
-            #     kind="simple",
             #     source="retrieve_docs",
             #     target="generate_fast_answer",
             # ),
             # SimpleEdgeSpec(
-            #     kind="simple",
             #     source="retrieve_docs",
             #     target="generate_strict_answer",
             # ),
             # RouterEdgeSpec(
-            #     kind="router",
             #     source="retrieve_docs",
-            #     router_key="answer_quality_router",
+            #     state_route_field="route",
             #     routes={
             #         "fast": "generate_fast_answer",
             #         "strict": "generate_strict_answer",
@@ -109,19 +102,10 @@ GRAPHS = {
                 output_key="answer",
             ),
         ],
-        routers=[
-            # Reads state.route and uses it as the route key.
-            StateFieldRouterSpec(
-                name="route_from_state",
-                kind="state_field",
-                field="route",
-            ),
-        ],
         edges=[
             RouterEdgeSpec(
-                kind="router",
                 source="intent_classifier",
-                router_key="route_from_state",
+                state_route_field="route",
                 routes={
                     "search": "retrieve_docs",
                     "chat": "generate_answer",
@@ -129,16 +113,14 @@ GRAPHS = {
                 default_target="generate_answer",
             ),
             SimpleEdgeSpec(
-                kind="simple",
                 source="retrieve_docs",
                 target="generate_answer",
             ),
 
             # --- Showcase edges (disabled examples) ---
             # RouterEdgeSpec(
-            #     kind="router",
             #     source="intent_classifier",
-            #     router_key="route_from_state",
+            #     state_route_field="route",
             #     routes={
             #         "search": "retrieve_docs",
             #         "chat": "generate_answer",
@@ -170,7 +152,6 @@ GRAPHS = {
         ],
         edges=[
             SimpleEdgeSpec(
-                kind="simple",
                 source="retrieve_docs_aws",
                 target="generate_answer_aws",
             ),

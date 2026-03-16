@@ -7,7 +7,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from ruter_chatbot.graph.node_registry import NodeRegistry
-from ruter_chatbot.graph.router_registry import RouterRegistry
 from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.specs.state import state_registry
@@ -30,7 +29,6 @@ class Orchestrator:
         self.pipelines = PipelineRegistry(self.models)
         self.vector_stores = VectorStoreRegistry()
         self.prompts: dict[str, PromptSpec] = {}
-        self.routers = RouterRegistry()
 
         self.nodes = NodeRegistry(
             pipelines=self.pipelines,
@@ -56,9 +54,6 @@ class Orchestrator:
 
         for node_spec in self.spec.graph.nodes:
             self.nodes.from_spec(node_spec)
-
-        for router_spec in self.spec.graph.routers:
-            self.routers.from_spec(router_spec)
 
     async def initialize(self, *store_keys: str) -> None:
         if not store_keys:
@@ -105,8 +100,6 @@ class Orchestrator:
                 continue
 
             if isinstance(edge, RouterEdgeSpec):
-                router = self.routers.get(edge.router_key)
-
                 path_map = dict(edge.routes)
                 if edge.default_target:
                     path_map["__default__"] = edge.default_target
@@ -118,11 +111,15 @@ class Orchestrator:
                 def _route_with_default(
                     state: Any,
                     *,
-                    _router=router,
+                    _route_field=edge.state_route_field,
                     _path_map=path_map,
                     _default=edge.default_target,
                 ) -> str | None:
-                    result = _router.route(state)
+                    if isinstance(state, dict):
+                        result = state.get(_route_field)
+                    else:
+                        result = getattr(state, _route_field, None)
+
                     if result in _path_map:
                         return result
                     if _default:
@@ -134,6 +131,9 @@ class Orchestrator:
                     _route_with_default,
                     path_map=path_map,
                 )
+                continue
+
+            raise TypeError(f"Unsupported edge type: {type(edge)!r}")
 
         entry_nodes = all_nodes - edge_targets
         if not entry_nodes and graph_spec.nodes:
