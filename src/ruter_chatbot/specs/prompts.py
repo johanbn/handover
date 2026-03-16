@@ -115,9 +115,6 @@ Regler:
 - Hvis route er tomt eller irrelevant, ignorer det.
 - Svar på samme språk som brukeren.
 
-Route:
-{route}
-
 Spørsmål:
 {question}
 
