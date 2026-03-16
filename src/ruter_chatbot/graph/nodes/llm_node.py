@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ruter_chatbot.graph.nodes.base import BaseNode
@@ -11,21 +10,9 @@ from ruter_chatbot.logger import get_logger
 from ruter_chatbot.types.iac.node_spec import LLMNodeSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
+from ruter_chatbot.utility.build_context import build_context
 
 logger = get_logger(__name__)
-
-
-def build_context(docs: list[Document], max_chars_per_doc: int = 10_000) -> str:
-    if not docs:
-        return ""
-
-    parts: list[str] = []
-    for i, doc in enumerate(docs, start=1):
-        source = doc.metadata.get("source", "unknown")
-        text = doc.page_content.strip()[:max_chars_per_doc]
-        parts.append(f"[Doc {i} | source={source}]\n{text}")
-
-    return "\n\n".join(parts)
 
 
 class LLMNode(BaseNode):
