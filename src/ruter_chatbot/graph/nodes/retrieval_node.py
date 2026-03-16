@@ -44,9 +44,14 @@ class RetrievalNode(BaseNode):
             with_score=self.with_score,
         )
 
-        if self.with_score:  # Omitting score
-            docs = [doc for doc, _score in results]
-        else:
-            docs = results
+        if self.with_score:
+            docs = []
+            for doc, score in results:
+                # ensure metadata exists
+                doc.metadata = doc.metadata or {}
+                doc.metadata["score"] = float(score)
+                docs.append(doc)
 
-        return {self.output_key: docs}
+            return {self.output_key: docs}
+
+        return {self.output_key: results}
