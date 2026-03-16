@@ -109,10 +109,6 @@ class VectorStore:
         if embed_type == "bedrock":
             model_id = embed_args.pop("model_id", None)
             region_name = embed_args.pop("region_name", "eu-west-1")
-            credentials_profile_name = embed_args.pop(
-                "credentials_profile_name",
-                None,
-            )
 
             if not model_id:
                 raise ValueError(
@@ -124,14 +120,7 @@ class VectorStore:
                 "region_name": region_name,
             }
 
-            if credentials_profile_name:
-                session = boto3.Session(
-                    profile_name=credentials_profile_name,
-                    region_name=region_name,
-                )
-                client = session.client("bedrock-runtime")
-            else:
-                client = boto3.client(**client_kwargs)
+            client = boto3.client(**client_kwargs)
 
             return BedrockEmbeddings(
                 client=client,
