@@ -6,7 +6,7 @@ class SmartChunkerSpec(BaseModel):
     '''
     max_chunk_size: int | None = 1000
     '''The chunker will produce no chunks with more than max_chunk_size characters.'''
-    max_overlap: int | 200
+    max_overlap: int = 200
     '''The chunker will make overlap in chunk B based on the up to max_overlap last characters of chunk A.'''
     semantic_min: int | None = 120
     '''
