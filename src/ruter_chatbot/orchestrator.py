@@ -7,6 +7,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from ruter_chatbot.graph.node_registry import NodeRegistry
+from ruter_chatbot.graph.router_registry import RouterRegistry
 from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.specs.state import state_registry
@@ -17,7 +18,9 @@ from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
 
 import logging
+
 logging.getLogger("langchain_aws").setLevel(logging.WARNING)
+
 
 class Orchestrator:
     def __init__(self, spec: AppSpec) -> None:
@@ -27,6 +30,7 @@ class Orchestrator:
         self.pipelines = PipelineRegistry(self.models)
         self.vector_stores = VectorStoreRegistry()
         self.prompts: dict[str, PromptSpec] = {}
+        self.routers = RouterRegistry()
 
         self.nodes = NodeRegistry(
             pipelines=self.pipelines,
@@ -51,7 +55,10 @@ class Orchestrator:
             self.vector_stores.from_spec(vector_store_spec)
 
         for node_spec in self.spec.graph.nodes:
-            self.nodes.from_spec(node_spec)
+            if getattr(node_spec, "kind", None) == "conditional":
+                self.routers.from_spec(node_spec)
+            else:
+                self.nodes.from_spec(node_spec)
 
     async def initialize(self, *store_keys: str) -> None:
         if not store_keys:
@@ -82,12 +89,18 @@ class Orchestrator:
         state_type = state_registry[graph_spec.state_key]
         builder = StateGraph(state_type)
 
-        for node_spec in graph_spec.nodes:
-            if getattr(node_spec, "kind", None) != "conditional":
-                builder.add_node(node_spec.name, self.nodes.get(node_spec.name))
+        executable_nodes = [
+            node_spec
+            for node_spec in graph_spec.nodes
+            if getattr(node_spec, "kind", None) != "conditional"
+        ]
+
+        for node_spec in executable_nodes:
+            builder.add_node(node_spec.name, self.nodes.get(node_spec.name))
 
         edge_sources: set[str] = set()
         edge_targets: set[str] = set()
+        all_nodes = {node_spec.name for node_spec in executable_nodes}
 
         for edge in graph_spec.edges:
             edge_sources.add(edge.source)
@@ -98,7 +111,7 @@ class Orchestrator:
                 continue
 
             if isinstance(edge, RouterEdgeSpec):
-                router = self.nodes.get(edge.router_key)
+                router = self.routers.get(edge.router_key)
 
                 path_map = dict(edge.routes)
                 if edge.default_target:
@@ -112,10 +125,13 @@ class Orchestrator:
                     state: Any,
                     *,
                     _router=router,
+                    _path_map=path_map,
                     _default=edge.default_target,
                 ) -> str | None:
                     result = _router.route(state)
-                    if result is None and _default:
+                    if result in _path_map:
+                        return result
+                    if _default:
                         return "__default__"
                     return result
 
@@ -125,14 +141,14 @@ class Orchestrator:
                     path_map=path_map,
                 )
 
-        entry_nodes = edge_sources - edge_targets
-        if not entry_nodes and graph_spec.nodes:
-            entry_nodes = {graph_spec.nodes[0].name}
+        entry_nodes = all_nodes - edge_targets
+        if not entry_nodes and executable_nodes:
+            entry_nodes = {executable_nodes[0].name}
 
         for entry in entry_nodes:
             builder.add_edge(START, entry)
 
-        leaf_nodes = edge_targets - edge_sources
+        leaf_nodes = all_nodes - edge_sources
         for leaf in leaf_nodes:
             builder.add_edge(leaf, END)
 

@@ -18,7 +18,7 @@ GRAPH = {
             RetrieverNodeSpec(
                 name="retrieve_docs",
                 kind="retriever",
-                store_key="ruter_store_aws", # ruter_store
+                store_key="ruter_store_aws",  # ruter_store
                 top_k=5,
                 output_key="docs",
             ),
@@ -89,15 +89,19 @@ GRAPH = {
                 prompt_key="intent_prompt",
                 output_key="route",
             ),
+
+            # Transitional: this is registered as a router, not executed as a graph node.
+            # The router simply reads state.route and returns it as the route key.
             ConditionalNodeSpec(
                 name="route_from_state",
                 kind="conditional",
                 field="route",
             ),
+
             RetrieverNodeSpec(
                 name="retrieve_docs",
                 kind="retriever",
-                store_key="ruter_store_aws", # ruter_store
+                store_key="ruter_store_aws",  # ruter_store
                 top_k=15,
                 output_key="docs",
                 with_score=True,
@@ -148,7 +152,7 @@ GRAPH = {
             RetrieverNodeSpec(
                 name="retrieve_docs_aws",
                 kind="retriever",
-                store_key="ruter_store_aws", # ruter_store
+                store_key="ruter_store_aws",  # ruter_store
                 top_k=5,
                 output_key="docs",
             ),

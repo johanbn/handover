@@ -2,7 +2,6 @@ import asyncio
 import os
 
 from ruter_chatbot.orchestrator import Orchestrator
-
 from ruter_chatbot.types.iac.app_spec import AppSpec
 
 from ruter_chatbot.specs.prompts import PROMPTS
@@ -32,19 +31,19 @@ def draw_graph_png(graph, file_path: str = "graph.png") -> None:
         print("Error:", e)
 
 
-
 APP = AppSpec(
     models=MODELS,
     pipelines=PIPELINES,
     prompts=PROMPTS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPH["conditional_demo"] # aws_demo, conditional_demo, demo
+    graph=GRAPH["conditional_demo"],
 )
+
 
 async def main() -> None:
     APP.pipelines["claude_bedrock_rag"].args["temperature"] = 0.2
     print(APP.model_dump_json(indent=4))
-    
+
     orch = Orchestrator(APP)
     draw_graph_png(orch.graph, "graph.png")
 
