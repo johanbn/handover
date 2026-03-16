@@ -44,7 +44,6 @@ class RetrievalNode(BaseNode):
         )
 
     def __call__(self, state: RagState) -> dict[str, Any]:
-
         if "similarity" in self.search_type:
             with_score = self.search_type == "scored_similarity"
 
