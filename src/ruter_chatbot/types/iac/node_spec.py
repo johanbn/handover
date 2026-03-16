@@ -20,9 +20,12 @@ class LLMNodeSpec(BaseNodeSpec):
 class RetrieverNodeSpec(BaseNodeSpec):
     kind: Literal["retriever"]
     store_key: str
+    search_type: Literal[
+        "similarity",
+        "scored_similarity",
+        "mmr",
+    ] = "mmr"
     top_k: int = 5
-    with_score: bool = False
-    search_type: Literal["similarity", "mmr"] = "similarity"
     fetch_k: int = 20
     lambda_mult: float = 0.5
     output_key: str = "docs"
