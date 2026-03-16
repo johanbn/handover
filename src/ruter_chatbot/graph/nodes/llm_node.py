@@ -61,7 +61,6 @@ class LLMNode(BaseNode):
             "question": state.question,
             "context": context,
             "answer": state.answer,
-            "route": state.route,
         }
         rendered_prompt = self.prompt_template.format(**prompt_vars)
 
