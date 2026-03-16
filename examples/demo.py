@@ -8,7 +8,7 @@ from ruter_chatbot.specs.prompts import PROMPTS
 from ruter_chatbot.specs.models import MODELS
 from ruter_chatbot.specs.pipelines import PIPELINES
 from ruter_chatbot.specs.vector_stores import VECTOR_STORES
-from ruter_chatbot.specs.graphs import GRAPH
+from ruter_chatbot.specs.graphs import GRAPHS
 
 
 def draw_graph_png(graph, file_path: str = "graph.png") -> None:
@@ -36,7 +36,7 @@ APP = AppSpec(
     pipelines=PIPELINES,
     prompts=PROMPTS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPH["conditional_demo"],
+    graph=GRAPHS["conditional_demo"],
 )
 
 

@@ -12,7 +12,7 @@ from ruter_chatbot.types.iac.edge_spec import (
 )
 
 
-GRAPH = {
+GRAPHS = {
     "demo": GraphSpec(
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=False),
