@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class BaseNodeSpec(BaseModel):
-    name: str # unique within Graph.
+    name: str  # unique within Graph.
     output_key: str | None = None
 
 
@@ -25,16 +25,10 @@ class RetrieverNodeSpec(BaseNodeSpec):
     output_key: str = "docs"
 
 
-class ConditionalNodeSpec(BaseNodeSpec):
-    kind: Literal["conditional"]
-    field: str
-
-
 NodeSpec = Annotated[
     Union[
         LLMNodeSpec,
         RetrieverNodeSpec,
-        ConditionalNodeSpec,
     ],
     Field(discriminator="kind"),
 ]

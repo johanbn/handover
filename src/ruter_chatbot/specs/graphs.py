@@ -2,7 +2,9 @@ from ruter_chatbot.types.iac.graph_spec import GraphSpec, GraphCompileArgs
 from ruter_chatbot.types.iac.node_spec import (
     LLMNodeSpec,
     RetrieverNodeSpec,
-    ConditionalNodeSpec,
+)
+from ruter_chatbot.types.iac.router_spec import (
+    StateFieldRouterSpec,
 )
 from ruter_chatbot.types.iac.edge_spec import (
     SimpleEdgeSpec,
@@ -89,15 +91,6 @@ GRAPH = {
                 prompt_key="intent_prompt",
                 output_key="route",
             ),
-
-            # Transitional: this is registered as a router, not executed as a graph node.
-            # The router simply reads state.route and returns it as the route key.
-            ConditionalNodeSpec(
-                name="route_from_state",
-                kind="conditional",
-                field="route",
-            ),
-
             RetrieverNodeSpec(
                 name="retrieve_docs",
                 kind="retriever",
@@ -112,6 +105,14 @@ GRAPH = {
                 pipeline_key="claude_bedrock_rag",
                 prompt_key="rag_prompt",
                 output_key="answer",
+            ),
+        ],
+        routers=[
+            # Reads state.route and uses it as the route key.
+            StateFieldRouterSpec(
+                name="route_from_state",
+                kind="state_field",
+                field="route",
             ),
         ],
         edges=[

@@ -55,10 +55,10 @@ class Orchestrator:
             self.vector_stores.from_spec(vector_store_spec)
 
         for node_spec in self.spec.graph.nodes:
-            if getattr(node_spec, "kind", None) == "conditional":
-                self.routers.from_spec(node_spec)
-            else:
-                self.nodes.from_spec(node_spec)
+            self.nodes.from_spec(node_spec)
+
+        for router_spec in self.spec.graph.routers:
+            self.routers.from_spec(router_spec)
 
     async def initialize(self, *store_keys: str) -> None:
         if not store_keys:
@@ -89,18 +89,12 @@ class Orchestrator:
         state_type = state_registry[graph_spec.state_key]
         builder = StateGraph(state_type)
 
-        executable_nodes = [
-            node_spec
-            for node_spec in graph_spec.nodes
-            if getattr(node_spec, "kind", None) != "conditional"
-        ]
-
-        for node_spec in executable_nodes:
+        for node_spec in graph_spec.nodes:
             builder.add_node(node_spec.name, self.nodes.get(node_spec.name))
 
         edge_sources: set[str] = set()
         edge_targets: set[str] = set()
-        all_nodes = {node_spec.name for node_spec in executable_nodes}
+        all_nodes = {node_spec.name for node_spec in graph_spec.nodes}
 
         for edge in graph_spec.edges:
             edge_sources.add(edge.source)
@@ -142,8 +136,8 @@ class Orchestrator:
                 )
 
         entry_nodes = all_nodes - edge_targets
-        if not entry_nodes and executable_nodes:
-            entry_nodes = {executable_nodes[0].name}
+        if not entry_nodes and graph_spec.nodes:
+            entry_nodes = {graph_spec.nodes[0].name}
 
         for entry in entry_nodes:
             builder.add_edge(START, entry)
