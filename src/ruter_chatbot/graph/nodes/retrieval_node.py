@@ -44,28 +44,25 @@ class RetrievalNode(BaseNode):
         )
 
     def __call__(self, state: RagState) -> dict[str, Any]:
-        if self.search_type == "similarity":
+
+        if "similarity" in self.search_type:
+            with_score = self.search_type == "scored_similarity"
+
             results = self.store.similarity_search(
                 state.question,
                 k=self.top_k,
-                with_score=False,
+                with_score=with_score,
             )
+
+            if with_score:
+                docs = []
+                for doc, score in results:
+                    doc.metadata = doc.metadata or {}
+                    doc.metadata["score"] = float(score)
+                    docs.append(doc)
+                return {self.output_key: docs}
+
             return {self.output_key: results}
-
-        if self.search_type == "scored_similarity":
-            results = self.store.similarity_search(
-                state.question,
-                k=self.top_k,
-                with_score=True,
-            )
-
-            docs = []
-            for doc, score in results:
-                doc.metadata = doc.metadata or {}
-                doc.metadata["score"] = float(score)
-                docs.append(doc)
-
-            return {self.output_key: docs}
 
         if self.search_type == "mmr":
             results = self.store.max_marginal_relevance_search(
