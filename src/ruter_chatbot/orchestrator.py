@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -141,19 +142,28 @@ class Orchestrator:
 
         return builder.compile(**compile_kwargs)
 
-    async def ask(self, question: str, conversation_id: str | None = None) -> str:
-        if self.spec.graph.compile_args.use_memory and not conversation_id:
-            raise ValueError(
-                "conversation_id is required when graph memory is enabled"
-            )
+    async def ask(
+        self,
+        question: str,
+        conversation_id: str | None = None,
+    ) -> dict[str, str]:
+        use_memory = self.spec.graph.compile_args.use_memory
+
+        resolved_conversation_id = conversation_id
+        if use_memory and not resolved_conversation_id:
+            resolved_conversation_id = str(uuid4())
 
         input_state = {"question": question}
         config = (
-            {"configurable": {"thread_id": conversation_id}}
-            if conversation_id
+            {"configurable": {"thread_id": resolved_conversation_id}}
+            if resolved_conversation_id
             else None
         )
 
         out = await self.graph.ainvoke(input_state, config=config)
         result = out if isinstance(out, RagState) else RagState.model_validate(out)
-        return result.answer
+
+        return {
+            "answer": result.answer,
+            "conversation_id": resolved_conversation_id or "",
+        }

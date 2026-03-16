@@ -42,21 +42,18 @@ APP = AppSpec(
 )
 
 async def main() -> None:
-    # example of changing parameter to APP.
-
     APP.pipelines["claude_bedrock_rag"].args["temperature"] = 0.2
-    #APP.vector_stores["ruter_store"].chunker.max_chunk_size = 800
     print(APP.model_dump_json(indent=4))
     
     orch = Orchestrator(APP)
     draw_graph_png(orch.graph, "graph.png")
 
-
     print("Initializing vector stores...")
-    # Notice if no args, all db's in VECTOR_STORES is indexed.
-    await orch.initialize("ruter_store_aws") # ruter_store
+    await orch.initialize("ruter_store_aws")
     print("Ready.\n")
-    conv_id = 1
+
+    conv_id = "1"
+
     while True:
         q = input("You: ").strip()
 
@@ -66,10 +63,9 @@ async def main() -> None:
         if q.lower() in {"exit", "quit"}:
             break
 
-        answer = await orch.ask(q, conv_id)
-        print("\nAssistant:", answer)
+        result = await orch.ask(q, conv_id)
+        print("\nAssistant:", result["answer"])
         print("")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
