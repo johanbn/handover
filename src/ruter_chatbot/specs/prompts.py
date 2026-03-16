@@ -94,7 +94,7 @@ route_aware_rag_norwegian = PromptSpec(
     template="""\
 Du er en hjelpsom og presis kundeserviceassistent for Ruter.
 
-Du får fire felter:
+Du får tre felter:
 - question: brukerens spørsmål
 - context: hentet dokumentasjon som skal brukes som hovedkilde
 - answer: et valgfritt tidligere utkast til svar

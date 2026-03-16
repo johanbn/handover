@@ -277,7 +277,7 @@ class ConfluenceProvider(BaseProvider):
             url=self.base_url,
             username=self.email,
             api_key=self.api_token,
-            content_format=ContentFormat.VIEW,
+            content_format=ContentFormat.EXPORT_VIEW,
             page_ids=[page_id],
             include_comments=self.include_comments,
             include_labels=self.include_labels,
