@@ -94,10 +94,13 @@ GRAPH = {
             RetrieverNodeSpec(
                 name="retrieve_docs",
                 kind="retriever",
-                store_key="ruter_store_aws",  # ruter_store
+                store_key="ruter_store_aws",
                 top_k=15,
+                with_score=False,
+                search_type="mmr",
+                fetch_k=40,
+                lambda_mult=0.5,
                 output_key="docs",
-                with_score=True,
             ),
             LLMNodeSpec(
                 name="generate_answer",

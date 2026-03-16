@@ -22,6 +22,9 @@ class RetrieverNodeSpec(BaseNodeSpec):
     store_key: str
     top_k: int = 5
     with_score: bool = False
+    search_type: Literal["similarity", "mmr"] = "similarity"
+    fetch_k: int = 20
+    lambda_mult: float = 0.5
     output_key: str = "docs"
 
 

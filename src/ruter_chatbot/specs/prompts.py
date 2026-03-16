@@ -1,8 +1,10 @@
 '''Prompts are straightforward and better suited to a registry than a full spec.'''
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 
+
 # example
 naive = PromptSpec(
+    key="naive",
     template="""Question: {question}
 
 Context: {context}
@@ -11,6 +13,7 @@ Answer:"""
 )
 
 concise = PromptSpec(
+    key="concise",
     template="""
 Answer the question concisely using the provided context.
 
@@ -22,6 +25,7 @@ Answer:"""
 )
 
 first_person_informative_chatbot_norwegian = PromptSpec(
+    key="norwegian_chat",
     template="""
 Jeg er en chatbot, og bør levere svar i et chat-vennlig format.
 Det betyr korte svar i en hyggelig tone som gir den informasjonen som trengs, og ikke mer.
@@ -133,6 +137,7 @@ PROMPTS: dict[str, PromptSpec] = {
     "rag_prompt": rag_prompt,
     "route_aware_rag_norwegian": route_aware_rag_norwegian,
 }
+
 '''
 May be more of a registry. Holds known prompt templates, keyed by name.
 If the key exists here, it can be used by a Graph through a GraphSpec.
