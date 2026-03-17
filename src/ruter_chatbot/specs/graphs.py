@@ -9,8 +9,7 @@ from ruter_chatbot.types.iac.edge_spec import (
 )
 
 
-GRAPHS = {
-    "demo": GraphSpec(
+demo = {"demo": GraphSpec( 
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
@@ -73,7 +72,10 @@ GRAPHS = {
             # ),
         ],
     ),
-    "conditional_demo": GraphSpec(
+}
+''' Different demo setup'''
+
+conditional_demo = {"conditional_demo": GraphSpec(
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=True),
         nodes=[
@@ -130,7 +132,13 @@ GRAPHS = {
             # ),
         ],
     ),
-    "aws_demo": GraphSpec(
+}
+'''Demo of conditional branching'''
+
+
+
+    
+aws_demo = {"aws_demo": GraphSpec(
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
@@ -157,4 +165,12 @@ GRAPHS = {
             ),
         ],
     ),
+}
+'''AWS Bedrock DEMO'''
+
+
+
+GRAPHS: dict[str, GraphSpec] = {"demo": demo,
+          "conditional_demo": conditional_demo,
+          "aws_demo": aws_demo
 }
