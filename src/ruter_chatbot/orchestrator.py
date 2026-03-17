@@ -55,9 +55,9 @@ class Orchestrator:
         for node_spec in self.spec.graph.nodes:
             self.nodes.from_spec(node_spec)
 
-    async def initialize(self, *store_keys: str) -> None:
+    def initialize(self, *store_keys: str) -> None:
         if not store_keys:
-            await self.vector_stores.initialize_all()
+            self.vector_stores.initialize_all()
             return
 
         missing = [key for key in store_keys if key not in self.spec.vector_stores]
@@ -65,9 +65,9 @@ class Orchestrator:
             raise KeyError(f"Unknown vector store(s): {', '.join(missing)}")
 
         for store_key in store_keys:
-            await self.vector_stores.initialize(store_key)
+            self.vector_stores.initialize(store_key)
 
-    async def initialize_graph_dependencies(self) -> None:
+    def initialize_graph_dependencies(self) -> None:
         store_keys = {
             node_spec.store_key
             for node_spec in self.spec.graph.nodes
@@ -75,7 +75,7 @@ class Orchestrator:
         }
 
         if store_keys:
-            await self.initialize(*store_keys)
+            self.initialize(*store_keys)
 
     def build_graph(self, graph_spec: Any):
         if graph_spec.state_key not in state_registry:

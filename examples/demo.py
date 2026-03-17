@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 from ruter_chatbot.orchestrator import Orchestrator
@@ -40,7 +39,7 @@ APP = AppSpec(
 )
 
 
-async def main() -> None:
+def main() -> None:
     APP.pipelines["claude_bedrock_rag"].args["temperature"] = 0.2
     print(APP.model_dump_json(indent=4))
 
@@ -48,7 +47,7 @@ async def main() -> None:
     draw_graph_png(orch.graph, "graph.png")
 
     print("Initializing vector stores...")
-    await orch.initialize("ruter_store_aws") # ruter_store
+    orch.initialize("ruter_store_aws")
     print("Ready.\n")
 
     conv_id = "1"
@@ -66,5 +65,6 @@ async def main() -> None:
         print("\nAssistant:", result["answer"])
         print("")
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

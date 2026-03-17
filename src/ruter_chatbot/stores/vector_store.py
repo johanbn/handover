@@ -1,5 +1,5 @@
-import asyncio
 import subprocess
+import threading
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
@@ -26,17 +26,17 @@ class VectorStoreState(str, Enum):
 
 class VectorStore:
     """
-    Stateful runtime service for document retrieval + FAISS index lifecycle.
+    Thread-based runtime service for document retrieval + FAISS index lifecycle.
 
-    Design
-    ------
-    • built from declarative spec via from_spec()
-    • holds one active FAISS index at a time
-    • initialize() builds the first index
-    • refresh() rebuilds a new index beside the old one
-    • swap happens only when the new index is ready
-    • searches always use the current active index
-    • optional daily refresh loop can run in the background
+    Lifecycle
+    ---------
+    - from_spec() creates the store
+    - initialize() builds the first index (blocking)
+    - refresh() rebuilds and swaps in a new index (blocking)
+    - start_refresh() rebuilds and swaps in a new index (background thread)
+    - start_daily_refresh_loop() runs recurring background refresh
+    - searches always use the current active index
+    - active index is only swapped when the new one is fully built
     """
 
     def __init__(
@@ -55,9 +55,11 @@ class VectorStore:
         self._state: VectorStoreState = VectorStoreState.INITIALIZING
         self._active_index: FAISS | None = None
 
-        self._lock = asyncio.Lock()
-        self._refresh_task: asyncio.Task | None = None
-        self._daily_refresh_task: asyncio.Task | None = None
+        self._lock = threading.RLock()
+
+        self._refresh_thread: threading.Thread | None = None
+        self._daily_refresh_thread: threading.Thread | None = None
+        self._daily_refresh_stop_event = threading.Event()
 
     @classmethod
     def from_spec(cls, spec: "VectorStoreSpec") -> "VectorStore":
@@ -115,12 +117,10 @@ class VectorStore:
                     "EmbedSpec.args must include 'model_id' for bedrock"
                 )
 
-            client_kwargs: dict[str, Any] = {
-                "service_name": "bedrock-runtime",
-                "region_name": region_name,
-            }
-
-            client = boto3.client(**client_kwargs)
+            client = boto3.client(
+                service_name="bedrock-runtime",
+                region_name=region_name,
+            )
 
             return BedrockEmbeddings(
                 client=client,
@@ -132,23 +132,39 @@ class VectorStore:
 
     @property
     def state(self) -> VectorStoreState:
-        return self._state
+        with self._lock:
+            return self._state
 
     @property
     def is_ready(self) -> bool:
-        return self._active_index is not None and self._state in {
-            VectorStoreState.READY,
-            VectorStoreState.REFRESHING,
-        }
+        with self._lock:
+            return self._active_index is not None and self._state in {
+                VectorStoreState.READY,
+                VectorStoreState.REFRESHING,
+            }
 
     @property
     def is_refreshing(self) -> bool:
-        return self._state == VectorStoreState.REFRESHING
+        with self._lock:
+            return self._state == VectorStoreState.REFRESHING
+
+    @property
+    def is_background_refresh_running(self) -> bool:
+        thread = self._refresh_thread
+        return thread is not None and thread.is_alive()
+
+    @property
+    def is_daily_refresh_running(self) -> bool:
+        thread = self._daily_refresh_thread
+        return thread is not None and thread.is_alive()
 
     def _require_active_index(self) -> FAISS:
-        index = self._active_index
+        with self._lock:
+            index = self._active_index
+
         if index is None:
             raise RuntimeError(f"VectorStore '{self.name}' is not ready")
+
         return index
 
     def similarity_search(
@@ -181,68 +197,123 @@ class VectorStore:
             lambda_mult=lambda_mult,
         )
 
-    async def initialize(self) -> None:
-        async with self._lock:
+    def initialize(self) -> None:
+        """
+        Blocking initialization.
+        Safe to call multiple times; only the first successful call builds the index.
+        """
+        with self._lock:
             if self._active_index is not None:
                 return
-
             self._state = VectorStoreState.INITIALIZING
 
-        try:
-            new_index = await self._build_index_from_provider()
+        self._rebuild_and_swap(failure_state=VectorStoreState.FAILED)
 
-            async with self._lock:
-                self._active_index = new_index
-                self._state = VectorStoreState.READY
+    def refresh(self) -> None:
+        """
+        Blocking one-shot refresh.
+        Searches continue using the old index while refresh is running.
+        """
+        self._prepare_refresh()
+        self._rebuild_and_swap(failure_state=VectorStoreState.READY)
 
-        except Exception:
-            async with self._lock:
-                self._state = VectorStoreState.FAILED
-            raise
+    def start_refresh(self) -> threading.Thread:
+        """
+        Start a background one-shot refresh.
+        Returns the worker thread.
+        """
+        self._prepare_refresh()
 
-    async def refresh(self) -> None:
-        task = await self.start_refresh()
-        await task
+        thread = threading.Thread(
+            target=self._refresh_thread_entrypoint,
+            name=f"{self.name}-refresh",
+            daemon=True,
+        )
 
-    async def start_refresh(self) -> asyncio.Task:
-        async with self._lock:
+        with self._lock:
+            self._refresh_thread = thread
+
+        thread.start()
+        return thread
+
+    def start_daily_refresh_loop(
+        self,
+        hour: int = 4,
+        minute: int = 30,
+    ) -> threading.Thread:
+        """
+        Start a recurring background refresh loop.
+        The loop waits until the next scheduled time, then runs a blocking refresh
+        inside its own worker thread.
+        """
+        with self._lock:
+            if self._daily_refresh_thread and self._daily_refresh_thread.is_alive():
+                raise RuntimeError(
+                    f"VectorStore '{self.name}' daily refresh loop already running"
+                )
+
+            self._daily_refresh_stop_event.clear()
+
+            thread = threading.Thread(
+                target=self._daily_refresh_loop,
+                kwargs={"hour": hour, "minute": minute},
+                name=f"{self.name}-daily-refresh-loop",
+                daemon=True,
+            )
+            self._daily_refresh_thread = thread
+
+        thread.start()
+        return thread
+
+    def stop_daily_refresh_loop(self, timeout: float | None = None) -> None:
+        thread = self._daily_refresh_thread
+        if thread is None:
+            return
+
+        self._daily_refresh_stop_event.set()
+        thread.join(timeout=timeout)
+
+        with self._lock:
+            if self._daily_refresh_thread is thread and not thread.is_alive():
+                self._daily_refresh_thread = None
+
+    def _prepare_refresh(self) -> None:
+        with self._lock:
             if self._active_index is None:
                 raise RuntimeError(
                     f"VectorStore '{self.name}' cannot refresh before initialization"
                 )
 
-            if self._refresh_task and not self._refresh_task.done():
+            if self._refresh_thread and self._refresh_thread.is_alive():
                 raise RuntimeError(
                     f"VectorStore '{self.name}' refresh already running"
                 )
 
             self._state = VectorStoreState.REFRESHING
 
-            self._refresh_task = asyncio.create_task(
-                self._refresh_impl(),
-                name=f"{self.name}-refresh",
-            )
-
-            return self._refresh_task
-
-    async def _refresh_impl(self) -> None:
+    def _refresh_thread_entrypoint(self) -> None:
         try:
-            new_index = await self._build_index_from_provider()
+            self._rebuild_and_swap(failure_state=VectorStoreState.READY)
+        except Exception as exc:
+            print(f"[{self.name}] Background refresh failed: {exc}")
+        finally:
+            with self._lock:
+                self._refresh_thread = None
 
-            async with self._lock:
+    def _rebuild_and_swap(self, *, failure_state: VectorStoreState) -> None:
+        try:
+            new_index = self._build_index_from_provider()
+
+            with self._lock:
                 self._active_index = new_index
                 self._state = VectorStoreState.READY
 
         except Exception:
-            async with self._lock:
-                self._state = (
-                    VectorStoreState.READY
-                    if self._active_index is not None
-                    else VectorStoreState.FAILED
-                )
+            with self._lock:
+                self._state = failure_state
             raise
 
-    async def _build_index_from_provider(self) -> FAISS:
+    def _build_index_from_provider(self) -> FAISS:
         sources = self.provider.list_sources()
 
         docs: list[Document] = []
@@ -282,59 +353,33 @@ class VectorStore:
 
         return FAISS.from_documents(docs, self.embeddings, ids=ids)
 
-    def start_daily_refresh_loop(
-        self,
-        hour: int = 4,
-        minute: int = 30,
-    ) -> asyncio.Task:
-        if self._daily_refresh_task and not self._daily_refresh_task.done():
-            raise RuntimeError(
-                f"VectorStore '{self.name}' daily refresh loop already running"
-            )
-
-        self._daily_refresh_task = asyncio.create_task(
-            self._daily_refresh_loop(hour=hour, minute=minute),
-            name=f"{self.name}-daily-refresh-loop",
-        )
-        return self._daily_refresh_task
-
-    async def stop_daily_refresh_loop(self) -> None:
-        task = self._daily_refresh_task
-        if task is None:
-            return
-
-        task.cancel()
+    def _daily_refresh_loop(self, hour: int, minute: int) -> None:
         try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        finally:
-            self._daily_refresh_task = None
-
-    async def _daily_refresh_loop(self, hour: int, minute: int) -> None:
-        try:
-            while True:
+            while not self._daily_refresh_stop_event.is_set():
                 wait_seconds = self._seconds_until_next_refresh(
                     hour=hour,
                     minute=minute,
                 )
+
                 print(
                     f"[{self.name}] Next scheduled refresh in "
                     f"{wait_seconds / 3600:.2f} hours"
                 )
 
-                await asyncio.sleep(wait_seconds)
+                if self._daily_refresh_stop_event.wait(timeout=wait_seconds):
+                    break
 
                 print(f"[{self.name}] Running scheduled refresh...")
                 try:
-                    await self.refresh()
+                    self.refresh()
                     print(f"[{self.name}] Scheduled refresh completed")
                 except Exception as exc:
                     print(f"[{self.name}] Scheduled refresh failed: {exc}")
 
-        except asyncio.CancelledError:
-            print(f"[{self.name}] Daily refresh loop cancelled")
-            raise
+        finally:
+            print(f"[{self.name}] Daily refresh loop stopped")
+            with self._lock:
+                self._daily_refresh_thread = None
 
     @staticmethod
     def _seconds_until_next_refresh(hour: int, minute: int) -> float:
@@ -348,6 +393,8 @@ class VectorStore:
 
 
 if __name__ == "__main__":
+    import time
+
     from ruter_chatbot.types.iac.embed_spec import EmbedSpec
     from ruter_chatbot.types.iac.provider_spec import ProviderSpec
     from ruter_chatbot.types.iac.smart_chunker_spec import SmartChunkerSpec
@@ -369,12 +416,9 @@ if __name__ == "__main__":
 
         return data_dir
 
-    async def main() -> None:
+    def main() -> None:
         data_dir = ensure_test_data()
 
-        from ruter_chatbot.specs.providers import ruterwiki_ks
-
-        # use this provider for quick test
         simple_test = ProviderSpec(
             type="filesystem",
             args={
@@ -385,7 +429,7 @@ if __name__ == "__main__":
 
         spec = VectorStoreSpec(
             name="test_store",
-            provider=simple_test,  # ruterwiki_ks, # uses ruterwiki
+            provider=simple_test,
             embedder=EmbedSpec(
                 type="ollama",
                 args={
@@ -404,18 +448,18 @@ if __name__ == "__main__":
         store = VectorStore.from_spec(spec)
 
         print("Initial state:", store.state)
+        print("Background refresh running:", store.is_background_refresh_running)
+        print("Daily refresh running:", store.is_daily_refresh_running)
 
         try:
             store.similarity_search("test")
         except RuntimeError as exc:
             print("Expected failure before initialize:", exc)
 
-        await store.initialize()
+        store.initialize()
 
         print("State after initialize:", store.state)
-
-        print("\nStarting daily refresh loop...")
-        store.start_daily_refresh_loop(hour=4, minute=30)
+        print("Ready:", store.is_ready)
 
         results = store.similarity_search(
             "Hva handler dokumentene om?",
@@ -447,19 +491,30 @@ if __name__ == "__main__":
         for result in mmr_results:
             print("-", result.page_content[:100], "|", result.metadata)
 
-        print("\nRunning refresh...")
-        refresh_task = await store.start_refresh()
+        print("\nStarting daily refresh loop...")
+        store.start_daily_refresh_loop(hour=4, minute=30)
+        print("Daily refresh running:", store.is_daily_refresh_running)
 
-        print("State during refresh:", store.state)
+        print("\nRunning blocking refresh...")
+        store.refresh()
+        print("State after blocking refresh:", store.state)
 
-        await refresh_task
+        print("\nRunning background refresh...")
+        refresh_thread = store.start_refresh()
 
-        print("State after refresh:", store.state)
+        print("State during background refresh:", store.state)
+        print("Background refresh running:", store.is_background_refresh_running)
+
+        refresh_thread.join()
+
+        print("State after background refresh:", store.state)
+        print("Background refresh running:", store.is_background_refresh_running)
 
         try:
-            await asyncio.sleep(5)
+            time.sleep(5)
         finally:
             print("\nStopping daily refresh loop...")
-            await store.stop_daily_refresh_loop()
+            store.stop_daily_refresh_loop(timeout=5)
+            print("Daily refresh running:", store.is_daily_refresh_running)
 
-    asyncio.run(main())
+    main()
