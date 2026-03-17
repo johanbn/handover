@@ -132,9 +132,6 @@ conditional_demo = GraphSpec(
         ],
     )
 '''Demo of conditional branching'''
-
-
-
     
 aws_demo = GraphSpec(
         state_key="structured_rag",
