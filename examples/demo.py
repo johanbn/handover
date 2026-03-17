@@ -36,7 +36,7 @@ APP = AppSpec(
     pipelines=PIPELINES,
     prompts=PROMPTS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPHS["conditional_demo"],
+    graph=GRAPHS["aws_demo"],
 )
 
 
@@ -48,7 +48,7 @@ async def main() -> None:
     draw_graph_png(orch.graph, "graph.png")
 
     print("Initializing vector stores...")
-    await orch.initialize("ruter_store_aws")
+    await orch.initialize("ruter_store_aws") # ruter_store
     print("Ready.\n")
 
     conv_id = "1"
@@ -62,7 +62,7 @@ async def main() -> None:
         if q.lower() in {"exit", "quit"}:
             break
 
-        result = await orch.ask(q, conv_id)
+        result = orch.ask(q, conv_id)
         print("\nAssistant:", result["answer"])
         print("")
 

@@ -152,7 +152,7 @@ class Orchestrator:
 
         return builder.compile(**compile_kwargs)
 
-    async def ask(
+    def ask(
         self,
         question: str,
         conversation_id: str | None = None,
@@ -170,7 +170,7 @@ class Orchestrator:
             else None
         )
 
-        out = await self.graph.ainvoke(input_state, config=config)
+        out = self.graph.invoke(input_state, config=config)
         result = out if isinstance(out, RagState) else RagState.model_validate(out)
 
         return {
