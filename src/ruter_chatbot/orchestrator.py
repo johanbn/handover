@@ -37,7 +37,7 @@ class Orchestrator:
         )
 
         self._load_specs()
-        self.graph = self.build_graph(self.spec.graph)
+        self.build_graph(self.spec.graph)
 
     def _load_specs(self) -> None:
         for model_spec in self.spec.models.values():
@@ -150,7 +150,7 @@ class Orchestrator:
         if graph_spec.compile_args.use_memory:
             compile_kwargs["checkpointer"] = MemorySaver()
 
-        return builder.compile(**compile_kwargs)
+        self.graph = builder.compile(**compile_kwargs)
 
     def ask(
         self,
