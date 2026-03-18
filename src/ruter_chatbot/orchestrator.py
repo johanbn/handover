@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel
 
 from ruter_chatbot.graph.node_registry import NodeRegistry
 from ruter_chatbot.llm.model_registry import ModelRegistry
@@ -13,6 +14,7 @@ from ruter_chatbot.specs.state import state_registry
 from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
 from ruter_chatbot.types.iac.app_spec import AppSpec
 from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
+from ruter_chatbot.types.iac.graph_spec import GraphSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
 
@@ -77,7 +79,10 @@ class Orchestrator:
         if store_keys:
             self.initialize(*store_keys)
 
-    def build_graph(self, graph_spec: Any):
+    def build_graph(self, graph_spec: GraphSpec | dict[str, Any]):
+        if not isinstance(graph_spec, GraphSpec):
+            graph_spec = GraphSpec.model_validate(graph_spec)
+
         if graph_spec.state_key not in state_registry:
             raise KeyError(f"Unknown state_key: {graph_spec.state_key}")
 
@@ -151,29 +156,55 @@ class Orchestrator:
             compile_kwargs["checkpointer"] = MemorySaver()
 
         self.graph = builder.compile(**compile_kwargs)
+        self.spec.graph = graph_spec
+        return self.graph
 
     def ask(
         self,
         question: str,
         conversation_id: str | None = None,
-    ) -> dict[str, str]:
+        debug: bool = False,
+    ) -> dict[str, Any]:
         use_memory = self.spec.graph.compile_args.use_memory
 
-        resolved_conversation_id = conversation_id
-        if use_memory and not resolved_conversation_id:
-            resolved_conversation_id = str(uuid4())
+        resolved_conversation_id = conversation_id or str(uuid4()) if use_memory else None
 
         input_state = {"question": question}
-        config = (
-            {"configurable": {"thread_id": resolved_conversation_id}}
-            if resolved_conversation_id
-            else None
-        )
+        config = None
+        if resolved_conversation_id:
+            config = {
+                "configurable":
+                    {
+                        "thread_id": resolved_conversation_id
+                    }
+                }
 
         out = self.graph.invoke(input_state, config=config)
-        result = out if isinstance(out, RagState) else RagState.model_validate(out)
+        state_type = state_registry[self.spec.graph.state_key]
+        if issubclass(state_type, BaseModel):
+            result = out if isinstance(out, state_type) else state_type.model_validate(out)
+            result_dict = result.model_dump()
+        else:
+            result_dict = out
+        if debug:
+            response = {
+                **result_dict,
+            }
+        else:
+            response = {
+                "answer": result_dict.get(
+                    "answer",
+                    result_dict.get(
+                        "messages",
+                        ["I couldn't answer the question."]
+                    )[-1]
+                ),
+            }
+        
+        if use_memory:
+            response = {
+                **response,
+                "conversation_id": resolved_conversation_id,
+            }
 
-        return {
-            "answer": result.answer,
-            "conversation_id": resolved_conversation_id or "",
-        }
+        return response
