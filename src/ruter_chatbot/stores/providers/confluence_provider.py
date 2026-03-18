@@ -296,6 +296,7 @@ class ConfluenceProvider(BaseProvider):
             metadata = dict(doc.metadata)
             metadata.update(
                 {
+                    'source': source.location,
                     "confluence_page_id": page_id,
                     "confluence_space": source.meta.get("space_id"),
                     "confluence_url": source.location,
