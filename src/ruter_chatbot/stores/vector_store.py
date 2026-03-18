@@ -15,6 +15,8 @@ from langchain_ollama import OllamaEmbeddings
 
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
 from ruter_chatbot.stores.smart_chunker import SmartChunker
+from ruter_chatbot.logger import get_logger
+logger = get_logger(__name__)
 
 
 class VectorStoreState(str, Enum):
@@ -63,7 +65,7 @@ class VectorStore:
 
     @classmethod
     def from_spec(cls, spec: "VectorStoreSpec") -> "VectorStore":
-        print(
+        logger.info(
             f"Creating VectorStore "
             f"name={spec.name} "
             f"embedder_type={spec.embedder.type} "

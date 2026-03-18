@@ -5,7 +5,7 @@ from ruter_chatbot.types.iac.node_spec import NodeSpec
 
 
 class GraphCompileArgs(BaseModel):
-    use_memory: bool = False
+    use_memory: bool = True
 
 
 class GraphSpec(BaseModel):
