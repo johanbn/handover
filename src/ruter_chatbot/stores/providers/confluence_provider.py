@@ -163,17 +163,29 @@ class ConfluenceProvider(BaseProvider):
             for space_id in space_ids:
                 yield from self._iter_space_pages(space_id)
 
-    def _iter_page_results(self, results: list[Any], with_label: bool = False) -> Iterator[Source]:
+    def _iter_page_results(self, data: dict[str, Any], with_label: bool = False) -> Iterator[Source]:
         '''
         Handle the core results from an iterator.
+        Receives data instead of results to extract base + reduce duplication.
         '''
+        results = data.get(
+            "results",
+            []
+        )
+
+        base = data.get("_links", {}).get("base", "")
+        if not base:
+            base = urljoin(self.base_url, "wiki") # reasonable assumption
+
+        base_norm = base.rstrip("/") + "/"
+
         for page in results:
             page_id = page["id"]
             space_id = page["spaceId"]
             title = page.get("title")
 
             webui = page.get("_links", {}).get("webui", "")
-            page_url = urljoin(self.base_url, webui)
+            page_url = urljoin(base_norm, webui.lstrip("/"))
 
             version_metadata = page.get("version", {})
             version = version_metadata.get("number") # not page version.
@@ -218,10 +230,7 @@ class ConfluenceProvider(BaseProvider):
         )
 
         yield from self._iter_page_results(
-            data.get(
-                "results",
-                []
-            ),
+            data,
             with_label=True
         )
     
@@ -243,10 +252,7 @@ class ConfluenceProvider(BaseProvider):
         )
 
         yield from self._iter_page_results(
-            data.get(
-                "results",
-                []
-            ),
+            data,
             with_label=False
         )
     
