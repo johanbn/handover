@@ -1,6 +1,8 @@
 '''Intended to be main access point '''
 from fastapi import FastAPI
-
+from ruter_chatbot.specs.app import APP
+from ruter_chatbot.orchestrator import Orchestrator
+from ruter_chatbot.types.iac.app_spec import AppSpec
 # from orchestrator import Orchestrator
 # from specs.orchestrator_spec import orch_spec
 
@@ -39,3 +41,9 @@ async def confluence_test():
         "source": source,
         "docs": docs
     }
+
+orch = Orchestrator(APP)
+
+@app.get("/app-spec", response_model=AppSpec)
+def get_app_spec() -> AppSpec:
+    return orch.spec
