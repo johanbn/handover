@@ -29,6 +29,10 @@ Besøk samme addressen /docs for mer informasjon om hvordan du kan bruke dette A
 """
 }
 
+# endpoints that use the Orchestrator
+# NOTE: If this file gets crowded we move app definition to app.py
+# If it becomes too crowded yet again we find a way to organize endpoints in
+# subdirectories so we can import them here for use.
 
 @app.get("/confluence_test")
 async def confluence_test():
