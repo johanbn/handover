@@ -21,6 +21,19 @@ services:
       - OLLAMA_HOST=http://host.docker.internal:11434
     secrets:
       - confluence_token
+    
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    env_file:
+      - .env
+    environment:
+      - SECRET_DIR=/run/secrets
+    secrets:
+      - confluence_token
+    ports:
+      - "8080:8000"
 
 secrets:
   confluence_token:
