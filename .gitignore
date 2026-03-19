@@ -21,3 +21,6 @@ uv.lock
 # enviroment variables
 .env
 .secrets
+
+src/ruter_chatbot/specs/.ipynb_checkpoints/
+src/ruter_chatbot/stores/providers/.ipynb_checkpoints/

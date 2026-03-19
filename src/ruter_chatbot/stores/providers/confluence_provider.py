@@ -37,6 +37,7 @@ class ConfluenceProvider(BaseProvider):
         include_archived_content: bool = False,
         api_version: str = API_VERSION,
         timeout: float = 30.0,
+        min_length_doc = 100,
         **spec: Any
     ):
         super().__init__(**spec)
@@ -59,6 +60,8 @@ class ConfluenceProvider(BaseProvider):
         self.include_labels = include_labels
         self.include_comments = include_comments
         self.include_archived_content = include_archived_content
+
+        self.min_length_doc = min_length_doc
 
         self._session = self._build_session()
 
@@ -293,6 +296,8 @@ class ConfluenceProvider(BaseProvider):
         docs = loader.load()
 
         for doc in docs:
+            if not doc.page_content or len(doc.page_content.strip()) < self.min_length_doc:
+                continue  # skip this doc
             metadata = dict(doc.metadata)
             metadata.update(
                 {
