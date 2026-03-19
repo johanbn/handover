@@ -283,8 +283,9 @@ class ConfluenceProvider(BaseProvider):
         # Remove lines that consist only of 3 or more dashes (---), often used as separators
         text = re.sub(r'^\s*-{3,}\s*$', '', text, flags=re.MULTILINE)
 
-        # Remove any remaining sequences of 3 or more dashes within the text
-        text = re.sub(r'-{3,}', '', text)
+        # Remove any remaining sequences of 3 or more dashes within the text replace
+        # with withspace
+        text = re.sub(r'-{3,}', ' ', text)
 
         # Replace 2 or more consecutive newlines with exactly two (paragraph normalization)
         text = re.sub(r'\n{2,}', '\n\n', text)
