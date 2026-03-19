@@ -38,7 +38,7 @@ class ConfluenceProvider(BaseProvider):
         include_archived_content: bool = False,
         api_version: str = API_VERSION,
         timeout: float = 30.0,
-        min_length_doc = 100,
+        min_length_doc = 1,
         **spec: Any
     ):
         super().__init__(**spec)
@@ -260,10 +260,36 @@ class ConfluenceProvider(BaseProvider):
             with_label=False
         )
     
-    def clean(text: str) -> str:
+
+    def has_one_word(self, text: str) -> bool:
+        """
+        Returns True if the text contains exactly one word.
+
+        A 'word' is defined as a sequence of alphanumeric characters.
+        Leading/trailing whitespace is ignored.
+        """
+        words = re.findall(r'\b\w+\b', text)
+        return len(words) == 1
+
+    def clean(self, text: str) -> str:
+        """
+        Cleans up Confluence text content by:
+        - Removing lines that contain only horizontal rules (---)
+        - Removing long sequences of dashes within text
+        - Normalizing multiple newlines into a maximum of two
+        - Stripping leading/trailing whitespace
+        """
+
+        # Remove lines that consist only of 3 or more dashes (---), often used as separators
         text = re.sub(r'^\s*-{3,}\s*$', '', text, flags=re.MULTILINE)
+
+        # Remove any remaining sequences of 3 or more dashes within the text
         text = re.sub(r'-{3,}', '', text)
+
+        # Replace 2 or more consecutive newlines with exactly two (paragraph normalization)
         text = re.sub(r'\n{2,}', '\n\n', text)
+
+        # Trim leading and trailing whitespace
         return text.strip()
     
     # Document loading
@@ -297,14 +323,19 @@ class ConfluenceProvider(BaseProvider):
             page_ids=[page_id],
             include_comments=self.include_comments,
             include_labels=self.include_labels,
+            keep_markdown_format = False,
             include_attachments=False, # disabled for now out of dislike for how it does this.
         )
 
         docs = loader.load()
-
         for doc in docs:
-            if not doc.page_content or len(doc.page_content.strip()) < self.min_length_doc:
+            if (
+                not doc.page_content
+                or len(doc.page_content.strip()) < self.min_length_doc
+                or self.has_one_word(doc.page_content)
+            ):
                 continue  # skip this doc
+            
             metadata = dict(doc.metadata)
             metadata.update(
                 {
