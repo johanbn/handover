@@ -62,7 +62,7 @@ def main() -> None:
             break
 
         result = orch.ask(q, conv_id)
-        print("\nAssistant:", result["answer"])
+        print("\nAssistant:", result.answer)
         print("")
 
 

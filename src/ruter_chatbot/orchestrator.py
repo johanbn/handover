@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -12,11 +12,17 @@ from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.specs.state import state_registry
 from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
+from ruter_chatbot.types.app.ask import AskResponse
+from ruter_chatbot.types.app.vector_store import (
+    VectorStoreInfo,
+    VectorStoreListResponse,
+    VectorStoreSearchHit,
+    VectorStoreSearchResponse,
+)
 from ruter_chatbot.types.iac.app_spec import AppSpec
 from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
 from ruter_chatbot.types.iac.graph_spec import GraphSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
-from ruter_chatbot.types.iac.state_spec import RagState
 
 import logging
 
@@ -56,6 +62,90 @@ class Orchestrator:
 
         for node_spec in self.spec.graph.nodes:
             self.nodes.from_spec(node_spec)
+
+    def list_vector_stores(self) -> VectorStoreListResponse:
+        return VectorStoreListResponse(
+            stores=[
+                VectorStoreInfo(
+                    name=name,
+                    state=store.state.value,
+                )
+                for name, store in self.vector_stores.vector_stores.items()
+            ]
+        )
+
+    def search_vector_store(
+        self,
+        *,
+        store_name: str,
+        query: str,
+        method: Literal["similarity", "mmr"] = "similarity",
+        k: int = 4,
+        with_score: bool = False,
+        fetch_k: int = 20,
+        lambda_mult: float = 0.5,
+    ) -> VectorStoreSearchResponse:
+        store = self.vector_stores.get(store_name)
+
+        if method == "mmr" and with_score:
+            raise ValueError("with_score=True is only supported for method='similarity'")
+
+        if method == "similarity":
+            results = store.similarity_search(
+                query,
+                k=k,
+                with_score=with_score,
+            )
+
+            if with_score:
+                hits = [
+                    VectorStoreSearchHit(
+                        page_content=doc.page_content,
+                        metadata=dict(doc.metadata),
+                        score=float(score),
+                    )
+                    for doc, score in results
+                ]
+            else:
+                hits = [
+                    VectorStoreSearchHit(
+                        page_content=doc.page_content,
+                        metadata=dict(doc.metadata),
+                    )
+                    for doc in results
+                ]
+
+            return VectorStoreSearchResponse(
+                store_name=store_name,
+                method="similarity",
+                query=query,
+                k=k,
+                hits=hits,
+            )
+
+        if method == "mmr":
+            results = store.max_marginal_relevance_search(
+                query,
+                k=k,
+                fetch_k=fetch_k,
+                lambda_mult=lambda_mult,
+            )
+
+            return VectorStoreSearchResponse(
+                store_name=store_name,
+                method="mmr",
+                query=query,
+                k=k,
+                hits=[
+                    VectorStoreSearchHit(
+                        page_content=doc.page_content,
+                        metadata=dict(doc.metadata),
+                    )
+                    for doc in results
+                ],
+            )
+
+        raise ValueError(f"Unsupported search method: {method}")
 
     def initialize(self, *store_keys: str) -> None:
         if not store_keys:
@@ -164,47 +254,36 @@ class Orchestrator:
         question: str,
         conversation_id: str | None = None,
         debug: bool = False,
-    ) -> dict[str, Any]:
+    ) -> AskResponse:
         use_memory = self.spec.graph.compile_args.use_memory
-
         resolved_conversation_id = conversation_id or str(uuid4()) if use_memory else None
 
         input_state = {"question": question}
         config = None
+
         if resolved_conversation_id:
             config = {
-                "configurable":
-                    {
-                        "thread_id": resolved_conversation_id
-                    }
+                "configurable": {
+                    "thread_id": resolved_conversation_id,
                 }
+            }
 
         out = self.graph.invoke(input_state, config=config)
         state_type = state_registry[self.spec.graph.state_key]
+
         if issubclass(state_type, BaseModel):
             result = out if isinstance(out, state_type) else state_type.model_validate(out)
             result_dict = result.model_dump()
         else:
             result_dict = out
-        if debug:
-            response = {
-                **result_dict,
-            }
-        else:
-            response = {
-                "answer": result_dict.get(
-                    "answer",
-                    result_dict.get(
-                        "messages",
-                        ["I couldn't answer the question."]
-                    )[-1]
-                ),
-            }
-        
-        if use_memory:
-            response = {
-                **response,
-                "conversation_id": resolved_conversation_id,
-            }
 
-        return response
+        answer = result_dict.get(
+            "answer",
+            result_dict.get("messages", ["I couldn't answer the question."])[-1],
+        )
+
+        return AskResponse(
+            answer=answer,
+            conversation_id=resolved_conversation_id if use_memory else None,
+            state=result_dict if debug else None,
+        )

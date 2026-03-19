@@ -7,8 +7,7 @@ services:
       - ./src:/app/src
       - ./notebooks:/app/notebooks
       - ./examples:/app/examples
-      - ${OLLAMA_HOST_DIR}:/root/.ollama/models # define OLLAMA_HOST_DIR in .env
-    # Ollama from host
+      - ${OLLAMA_HOST_DIR}:/root/.ollama/models
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -19,9 +18,12 @@ services:
       - SECRET_DIR=/run/secrets
       - OLLAMA_MODELS=/root/.ollama/models
       - OLLAMA_HOST=http://host.docker.internal:11434
+      - AWS_REGION=${AWS_REGION}
     secrets:
       - confluence_token
-    
+      - aws_access_key_id
+      - aws_secret_access_key
+
   app:
     build:
       context: .
@@ -30,11 +32,18 @@ services:
       - .env
     environment:
       - SECRET_DIR=/run/secrets
+      - AWS_REGION=${AWS_REGION}
     secrets:
       - confluence_token
+      - aws_access_key_id
+      - aws_secret_access_key
     ports:
       - "8080:8000"
 
 secrets:
   confluence_token:
     file: .secrets/confluence_token.txt
+  aws_access_key_id:
+    file: .secrets/aws_access_key_id.txt
+  aws_secret_access_key:
+    file: .secrets/aws_secret_access_key.txt
