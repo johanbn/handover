@@ -1,4 +1,4 @@
-'''Intended to be main access point'''
+'''Intended to be main access point '''
 from fastapi import FastAPI
 
 from ruter_chatbot.orchestrator import Orchestrator
@@ -42,11 +42,11 @@ async def confluence_test():
     if not sources:
         return {"error": "Could not find any sources."}
 
-    source = sources[randint(0, len(sources) - 1)]
+    source = sources[randint(0, len(sources))]
     docs = provider.get_docs_from_source(source)
     return {
         "source": source,
-        "docs": docs,
+        "docs": docs
     }
 
 
