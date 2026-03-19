@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Iterator, Optional
 from urllib.parse import urljoin
 
@@ -259,6 +260,12 @@ class ConfluenceProvider(BaseProvider):
             with_label=False
         )
     
+    def clean(text: str) -> str:
+        text = re.sub(r'^\s*-{3,}\s*$', '', text, flags=re.MULTILINE)
+        text = re.sub(r'-{3,}', '', text)
+        text = re.sub(r'\n{2,}', '\n\n', text)
+        return text.strip()
+    
     # Document loading
 
     def _iter_docs_from_source(self, source: Source) -> Iterator[Document]:
@@ -310,8 +317,8 @@ class ConfluenceProvider(BaseProvider):
                     "last_modified": source.meta.get("last_modified")
                 }
             )
-
+            
             yield Document(
-                page_content=doc.page_content,
+                page_content=self.clean(doc.page_content),
                 metadata=metadata,
             )
