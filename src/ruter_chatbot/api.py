@@ -27,7 +27,7 @@ async def root_info():
 Hei, du har nådd roten av Ruters Chatbot-API for kundeservice.
 Besøk samme addressen /docs for mer informasjon om hvordan du kan bruke dette APIet.
 """
-    }
+}
 
 
 @app.get("/confluence_test")
