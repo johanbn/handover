@@ -7,7 +7,8 @@ services:
       - ./src:/app/src
       - ./notebooks:/app/notebooks
       - ./examples:/app/examples
-      - ${OLLAMA_HOST_DIR}:/root/.ollama/models
+      - ${OLLAMA_HOST_DIR}:/root/.ollama/models  # define OLLAMA_HOST_DIR in .env
+    # Ollama from host
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
