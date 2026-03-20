@@ -16,6 +16,7 @@ from ruter_chatbot.types.app.ask import AskResponse
 from ruter_chatbot.types.app.vector_store import (
     VectorStoreInfo,
     VectorStoreListResponse,
+    VectorStoreSearchRequest,
     VectorStoreSearchHit,
     VectorStoreSearchResponse,
 )
@@ -76,28 +77,18 @@ class Orchestrator:
 
     def search_vector_store(
         self,
-        *,
-        store_name: str,
-        query: str,
-        method: Literal["similarity", "mmr"] = "similarity",
-        k: int = 4,
-        with_score: bool = False,
-        fetch_k: int = 20,
-        lambda_mult: float = 0.5,
+        request: VectorStoreSearchRequest,
     ) -> VectorStoreSearchResponse:
-        store = self.vector_stores.get(store_name)
+        store = self.vector_stores.get(request.store_name)
 
-        if method == "mmr" and with_score:
-            raise ValueError("with_score=True is only supported for method='similarity'")
-
-        if method == "similarity":
+        if request.method == "similarity":
             results = store.similarity_search(
-                query,
-                k=k,
-                with_score=with_score,
+                request.query,
+                k=request.k,
+                with_score=request.with_score,
             )
 
-            if with_score:
+            if request.with_score:
                 hits = [
                     VectorStoreSearchHit(
                         page_content=doc.page_content,
@@ -116,36 +107,33 @@ class Orchestrator:
                 ]
 
             return VectorStoreSearchResponse(
-                store_name=store_name,
+                store_name=request.store_name,
                 method="similarity",
-                query=query,
-                k=k,
+                query=request.query,
+                k=request.k,
                 hits=hits,
             )
 
-        if method == "mmr":
-            results = store.max_marginal_relevance_search(
-                query,
-                k=k,
-                fetch_k=fetch_k,
-                lambda_mult=lambda_mult,
-            )
+        results = store.max_marginal_relevance_search(
+            request.query,
+            k=request.k,
+            fetch_k=request.fetch_k,
+            lambda_mult=request.lambda_mult,
+        )
 
-            return VectorStoreSearchResponse(
-                store_name=store_name,
-                method="mmr",
-                query=query,
-                k=k,
-                hits=[
-                    VectorStoreSearchHit(
-                        page_content=doc.page_content,
-                        metadata=dict(doc.metadata),
-                    )
-                    for doc in results
-                ],
-            )
-
-        raise ValueError(f"Unsupported search method: {method}")
+        return VectorStoreSearchResponse(
+            store_name=request.store_name,
+            method="mmr",
+            query=request.query,
+            k=request.k,
+            hits=[
+                VectorStoreSearchHit(
+                    page_content=doc.page_content,
+                    metadata=dict(doc.metadata),
+                )
+                for doc in results
+            ],
+        )
 
     def initialize(self, *store_keys: str) -> None:
         if not store_keys:

@@ -67,15 +67,7 @@ def list_vector_stores() -> VectorStoreListResponse:
 def search_vector_store(
     req: VectorStoreSearchRequest,
 ) -> VectorStoreSearchResponse:
-    return orch.search_vector_store(
-        store_name=req.store_name,
-        query=req.query,
-        method=req.method,
-        k=req.k,
-        with_score=req.with_score,
-        fetch_k=req.fetch_k,
-        lambda_mult=req.lambda_mult,
-    )
+    return orch.search_vector_store(req)
 
 
 @app.post("/vector-stores/initialize")
