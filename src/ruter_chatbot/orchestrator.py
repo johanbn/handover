@@ -16,8 +16,8 @@ from ruter_chatbot.types.app.ask import AskResponse
 from ruter_chatbot.types.app.vector_store import (
     VectorStoreInfo,
     VectorStoreListResponse,
-    VectorStoreSearchRequest,
     VectorStoreSearchHit,
+    VectorStoreSearchRequest,
     VectorStoreSearchResponse,
 )
 from ruter_chatbot.types.iac.app_spec import AppSpec
@@ -75,6 +75,48 @@ class Orchestrator:
             ]
         )
 
+    def _build_hits(
+        self,
+        docs: list[Any],
+    ) -> list[VectorStoreSearchHit]:
+        return [
+            VectorStoreSearchHit(
+                page_content=doc.page_content,
+                metadata=dict(doc.metadata),
+            )
+            for doc in docs
+        ]
+
+    def _build_scored_hits(
+        self,
+        docs_with_scores: list[tuple[Any, float]],
+    ) -> list[VectorStoreSearchHit]:
+        return [
+            VectorStoreSearchHit(
+                page_content=doc.page_content,
+                metadata=dict(doc.metadata),
+                score=float(score),
+            )
+            for doc, score in docs_with_scores
+        ]
+
+    def _search_response(
+        self,
+        *,
+        store_name: str,
+        method: Literal["similarity", "mmr"],
+        query: str,
+        k: int,
+        hits: list[VectorStoreSearchHit],
+    ) -> VectorStoreSearchResponse:
+        return VectorStoreSearchResponse(
+            store_name=store_name,
+            method=method,
+            query=query,
+            k=k,
+            hits=hits,
+        )
+
     def search_vector_store(
         self,
         request: VectorStoreSearchRequest,
@@ -88,25 +130,13 @@ class Orchestrator:
                 with_score=request.with_score,
             )
 
-            if request.with_score:
-                hits = [
-                    VectorStoreSearchHit(
-                        page_content=doc.page_content,
-                        metadata=dict(doc.metadata),
-                        score=float(score),
-                    )
-                    for doc, score in results
-                ]
-            else:
-                hits = [
-                    VectorStoreSearchHit(
-                        page_content=doc.page_content,
-                        metadata=dict(doc.metadata),
-                    )
-                    for doc in results
-                ]
+            hits = (
+                self._build_scored_hits(results)
+                if request.with_score
+                else self._build_hits(results)
+            )
 
-            return VectorStoreSearchResponse(
+            return self._search_response(
                 store_name=request.store_name,
                 method="similarity",
                 query=request.query,
@@ -114,6 +144,7 @@ class Orchestrator:
                 hits=hits,
             )
 
+        # mmr
         results = store.max_marginal_relevance_search(
             request.query,
             k=request.k,
@@ -121,18 +152,12 @@ class Orchestrator:
             lambda_mult=request.lambda_mult,
         )
 
-        return VectorStoreSearchResponse(
+        return self._search_response(
             store_name=request.store_name,
             method="mmr",
             query=request.query,
             k=request.k,
-            hits=[
-                VectorStoreSearchHit(
-                    page_content=doc.page_content,
-                    metadata=dict(doc.metadata),
-                )
-                for doc in results
-            ],
+            hits=self._build_hits(results),
         )
 
     def initialize(self, *store_keys: str) -> None:
@@ -252,7 +277,7 @@ class Orchestrator:
         if resolved_conversation_id:
             config = {
                 "configurable": {
-                    "thread_id": resolved_conversation_id,
+                    "thread_id": resolved_conversation_id
                 }
             }
 
