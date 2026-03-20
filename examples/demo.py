@@ -1,7 +1,7 @@
 import os
 
 from ruter_chatbot.orchestrator import Orchestrator
-from ruter_chatbot.types.iac.app_spec import AppSpec
+from ruter_chatbot.types.iac.app_spec import OrchestratorSpec
 
 from ruter_chatbot.specs.prompts import PROMPTS
 from ruter_chatbot.specs.models import MODELS
@@ -30,7 +30,7 @@ def draw_graph_png(graph, file_path: str = "graph.png") -> None:
         print("Error:", e)
 
 
-APP = AppSpec(
+APP = OrchestratorSpec(
     models=MODELS,
     pipelines=PIPELINES,
     prompts=PROMPTS,
@@ -40,14 +40,21 @@ APP = AppSpec(
 
 
 def main() -> None:
-    APP.pipelines["claude_bedrock_rag"].args["temperature"] = 0.2
-    print(APP.model_dump_json(indent=4))
+    app = APP.model_copy(deep=True)
+    app.pipelines["claude_bedrock_rag"].args["temperature"] = 0.2
 
-    orch = Orchestrator(APP)
-    draw_graph_png(orch.graph, "graph.png")
+    orch = Orchestrator.from_spec(app)
+
+    graph = orch.build_graph()
+    print(orch.to_used_spec().model_dump_json(indent=4))
+
+    draw_graph_png(graph, "graph.png")
 
     print("Initializing vector stores...")
     orch.initialize("ruter_store_aws")
+
+    print("\nUsed spec after vector store init:")
+    print(orch.to_used_spec().model_dump_json(indent=4))
     print("Ready.\n")
 
     conv_id = "1"

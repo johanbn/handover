@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
 from typing import Any
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
 
-from ruter_chatbot.graph.node_registry import NodeRegistry
+from ruter_chatbot.graph.graph_builder import GraphBuilder
+from ruter_chatbot.graph.node_builder import NodeBuilder
 from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.specs.state import state_registry
@@ -22,51 +24,330 @@ from ruter_chatbot.types.app.vector_store import (
     VectorStoreSearchHit,
     VectorStoreSearchResponse,
 )
-from ruter_chatbot.types.iac.app_spec import AppSpec
-from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
+from ruter_chatbot.types.iac.app_spec import OrchestratorSpec
 from ruter_chatbot.types.iac.graph_spec import GraphSpec
+from ruter_chatbot.types.iac.model_spec import ModelSpec
+from ruter_chatbot.types.iac.node_spec import LLMNodeSpec, RetrieverNodeSpec
+from ruter_chatbot.types.iac.pipeline_spec import PipelineSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
-
-import logging
+from ruter_chatbot.types.iac.state_spec import RagState
+from ruter_chatbot.graph.graph_builder import GraphBuilder
 
 logging.getLogger("langchain_aws").setLevel(logging.WARNING)
 
 
 class Orchestrator:
-    def __init__(self, spec: AppSpec) -> None:
-        self.spec = spec
+    def __init__(
+        self,
+        *,
+        models: dict[str, ModelSpec] | None = None,
+        pipelines: dict[str, PipelineSpec] | None = None,
+        prompts: dict[str, PromptSpec] | None = None,
+        vector_stores: dict[str, VectorStoreSpec] | None = None,
+        graph: GraphSpec | dict[str, Any] | None = None,
+    ) -> None:
+        self.model_specs: dict[str, ModelSpec] = models or {}
+        self.pipeline_specs: dict[str, PipelineSpec] = pipelines or {}
+        self.prompt_specs: dict[str, PromptSpec] = prompts or {}
+        self.vector_store_specs: dict[str, VectorStoreSpec] = vector_stores or {}
+        self.graph_spec: GraphSpec | None = (
+            GraphSpec.model_validate(graph)
+            if graph is not None and not isinstance(graph, GraphSpec)
+            else graph
+        )
 
-        self.models = ModelRegistry()
-        self.pipelines = PipelineRegistry(self.models)
-        self.vector_stores = VectorStoreRegistry()
+        self.models: ModelRegistry = ModelRegistry()
+        self.pipelines: PipelineRegistry = PipelineRegistry(self.models)
+        self.vector_stores: VectorStoreRegistry = VectorStoreRegistry()
         self.prompts: dict[str, PromptSpec] = {}
 
-        self.nodes = NodeRegistry(
+        self.graph = None
+
+        self._model_signatures: dict[str, str] = {}
+        self._pipeline_signatures: dict[str, str] = {}
+        self._prompt_signatures: dict[str, str] = {}
+        self._vector_store_signatures: dict[str, str] = {}
+        self._used_spec_signature: str | None = None
+
+    @classmethod
+    def from_spec(cls, spec: OrchestratorSpec) -> "Orchestrator":
+        return cls(
+            models=spec.models,
+            pipelines=spec.pipelines,
+            prompts=spec.prompts,
+            vector_stores=spec.vector_stores,
+            graph=spec.graph,
+        )
+
+    def to_declared_spec(self) -> OrchestratorSpec:
+        if self.graph_spec is None:
+            raise ValueError("Orchestrator has no declared graph spec.")
+
+        return OrchestratorSpec(
+            models=self.model_specs,
+            pipelines=self.pipeline_specs,
+            prompts=self.prompt_specs,
+            vector_stores=self.vector_store_specs,
+            graph=self.graph_spec,
+        )
+
+    @property
+    def spec(self) -> OrchestratorSpec:
+        return self.to_declared_spec()
+
+    def _spec_signature(self, spec: Any) -> str:
+        if hasattr(spec, "model_dump"):
+            payload = spec.model_dump(mode="json", exclude_none=True)
+        elif isinstance(spec, dict):
+            payload = spec
+        else:
+            payload = str(spec)
+
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _resolve_used_spec(self) -> OrchestratorSpec:
+        if self.graph_spec is None:
+            raise ValueError("Orchestrator has no declared graph spec.")
+
+        used_models: set[str] = set()
+        used_pipelines: set[str] = set()
+        used_prompts: set[str] = set()
+        used_vector_stores: set[str] = set()
+
+        def use_model(key: str) -> None:
+            if key not in self.model_specs:
+                raise KeyError(f"Unknown model: {key}")
+            used_models.add(key)
+
+        def use_prompt(key: str) -> None:
+            if key not in self.prompt_specs:
+                raise KeyError(f"Unknown prompt: {key}")
+            used_prompts.add(key)
+
+        def use_vector_store(key: str) -> None:
+            if key not in self.vector_store_specs:
+                raise KeyError(f"Unknown vector store: {key}")
+            if key in used_vector_stores:
+                return
+
+            used_vector_stores.add(key)
+            spec = self.vector_store_specs[key]
+
+            embedding_model_key = getattr(spec, "embedding_model_key", None)
+            if embedding_model_key:
+                use_model(embedding_model_key)
+
+        def use_pipeline(key: str) -> None:
+            if key not in self.pipeline_specs:
+                raise KeyError(f"Unknown pipeline: {key}")
+            if key in used_pipelines:
+                return
+
+            used_pipelines.add(key)
+            spec = self.pipeline_specs[key]
+
+            model_key = getattr(spec, "model_key", None)
+            if model_key:
+                use_model(model_key)
+
+            prompt_key = getattr(spec, "prompt_key", None)
+            if prompt_key:
+                use_prompt(prompt_key)
+
+            vector_store_key = getattr(spec, "vector_store_key", None)
+            if vector_store_key:
+                use_vector_store(vector_store_key)
+
+        for node in self.graph_spec.nodes:
+            if isinstance(node, LLMNodeSpec):
+                use_pipeline(node.pipeline_key)
+                use_prompt(node.prompt_key)
+            elif isinstance(node, RetrieverNodeSpec):
+                use_vector_store(node.store_key)
+
+        return OrchestratorSpec(
+            models={k: self.model_specs[k] for k in used_models},
+            pipelines={k: self.pipeline_specs[k] for k in used_pipelines},
+            prompts={k: self.prompt_specs[k] for k in used_prompts},
+            vector_stores={k: self.vector_store_specs[k] for k in used_vector_stores},
+            graph=self.graph_spec,
+        )
+
+    def to_used_spec(self) -> OrchestratorSpec:
+        return self._resolve_used_spec()
+
+    def _used_spec_digest(self, spec: OrchestratorSpec) -> str:
+        payload = {
+            "models": {
+                k: v.model_dump(mode="json", exclude_none=True)
+                for k, v in sorted(spec.models.items())
+            },
+            "pipelines": {
+                k: v.model_dump(mode="json", exclude_none=True)
+                for k, v in sorted(spec.pipelines.items())
+            },
+            "prompts": {
+                k: v.model_dump(mode="json", exclude_none=True)
+                for k, v in sorted(spec.prompts.items())
+            },
+            "vector_stores": {
+                k: v.model_dump(mode="json", exclude_none=True)
+                for k, v in sorted(spec.vector_stores.items())
+            },
+            "graph": spec.graph.model_dump(mode="json", exclude_none=True),
+        }
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _remove_model_runtime(self, key: str) -> None:
+        self.models.models.pop(key, None)
+        self._model_signatures.pop(key, None)
+
+    def _remove_pipeline_runtime(self, key: str) -> None:
+        self.pipelines.pipelines.pop(key, None)
+        self._pipeline_signatures.pop(key, None)
+
+    def _remove_prompt_runtime(self, key: str) -> None:
+        self.prompts.pop(key, None)
+        self._prompt_signatures.pop(key, None)
+
+    def _remove_vector_store_runtime(self, key: str) -> None:
+        self.vector_stores.vector_stores.pop(key, None)
+        self._vector_store_signatures.pop(key, None)
+
+    def _ensure_model(self, key: str, spec: ModelSpec) -> None:
+        signature = self._spec_signature(spec)
+        current_signature = self._model_signatures.get(key)
+
+        if key in self.models.models and current_signature == signature:
+            return
+
+        if key in self.models.models:
+            self._remove_model_runtime(key)
+
+        self.models.from_spec(spec)
+        self._model_signatures[key] = signature
+
+    def _ensure_prompt(self, key: str, spec: PromptSpec) -> None:
+        signature = self._spec_signature(spec)
+        current_signature = self._prompt_signatures.get(key)
+
+        if key in self.prompts and current_signature == signature:
+            return
+
+        self.prompts[key] = spec
+        self._prompt_signatures[key] = signature
+
+    def _ensure_vector_store(self, key: str, spec: VectorStoreSpec) -> None:
+        signature = self._spec_signature(spec)
+        current_signature = self._vector_store_signatures.get(key)
+
+        if key in self.vector_stores.vector_stores and current_signature == signature:
+            return
+
+        if key in self.vector_stores.vector_stores:
+            self._remove_vector_store_runtime(key)
+
+        self.vector_stores.from_spec(spec)
+        self._vector_store_signatures[key] = signature
+
+    def _ensure_pipeline(self, key: str, spec: PipelineSpec) -> None:
+        signature = self._spec_signature(spec)
+        current_signature = self._pipeline_signatures.get(key)
+
+        if key in self.pipelines.pipelines and current_signature == signature:
+            return
+
+        if key in self.pipelines.pipelines:
+            self._remove_pipeline_runtime(key)
+
+        self.pipelines.from_spec(spec)
+        self._pipeline_signatures[key] = signature
+
+    def _prune_unused_runtime(self, used_spec: OrchestratorSpec) -> None:
+        used_model_keys = set(used_spec.models.keys())
+        used_pipeline_keys = set(used_spec.pipelines.keys())
+        used_prompt_keys = set(used_spec.prompts.keys())
+        used_vector_store_keys = set(used_spec.vector_stores.keys())
+
+        for key in list(self.models.models.keys()):
+            if key not in used_model_keys:
+                self._remove_model_runtime(key)
+
+        for key in list(self.pipelines.pipelines.keys()):
+            if key not in used_pipeline_keys:
+                self._remove_pipeline_runtime(key)
+
+        for key in list(self.prompts.keys()):
+            if key not in used_prompt_keys:
+                self._remove_prompt_runtime(key)
+
+        for key in list(self.vector_stores.vector_stores.keys()):
+            if key not in used_vector_store_keys:
+                self._remove_vector_store_runtime(key)
+
+    def rebuild(self) -> None:
+        if self.graph_spec is None:
+            raise ValueError("Cannot rebuild without graph spec.")
+
+        used_spec = self._resolve_used_spec()
+        used_signature = self._used_spec_digest(used_spec)
+
+        for key, spec in used_spec.models.items():
+            self._ensure_model(key, spec)
+
+        for key, spec in used_spec.prompts.items():
+            self._ensure_prompt(key, spec)
+
+        for key, spec in used_spec.vector_stores.items():
+            self._ensure_vector_store(key, spec)
+
+        for key, spec in used_spec.pipelines.items():
+            self._ensure_pipeline(key, spec)
+
+        self._prune_unused_runtime(used_spec)
+
+        if self.graph is not None and self._used_spec_signature == used_signature:
+            return
+
+        node_builder = NodeBuilder(
             pipelines=self.pipelines,
             vector_stores=self.vector_stores,
             prompts=self.prompts,
         )
+        graph_builder = GraphBuilder(node_builder)
+        self.graph = graph_builder.build(used_spec.graph)
+        self._used_spec_signature = used_signature
+        return self.graph
 
-        self._load_specs()
-        self.build_graph(self.spec.graph)
+    def build_graph(
+        self,
+        graph_spec: GraphSpec | dict[str, Any] | None = None,
+    ):
+        if graph_spec is not None:
+            self.graph_spec = (
+                GraphSpec.model_validate(graph_spec)
+                if not isinstance(graph_spec, GraphSpec)
+                else graph_spec
+            )
 
-    def _load_specs(self) -> None:
-        for model_spec in self.spec.models.values():
-            self.models.from_spec(model_spec)
+        if self.graph is None:
+            self.rebuild()
+            return self.graph
 
-        for pipeline_spec in self.spec.pipelines.values():
-            self.pipelines.from_spec(pipeline_spec)
+        used_spec = self._resolve_used_spec()
+        used_signature = self._used_spec_digest(used_spec)
 
-        for prompt_spec in self.spec.prompts.values():
-            self.prompts[prompt_spec.key] = prompt_spec
+        if self._used_spec_signature != used_signature:
+            self.rebuild()
 
-        for vector_store_spec in self.spec.vector_stores.values():
-            self.vector_stores.from_spec(vector_store_spec)
-
-        for node_spec in self.spec.graph.nodes:
-            self.nodes.from_spec(node_spec)
+        return self.graph
 
     def list_vector_stores(self) -> VectorStoreListResponse:
+        for key, spec in self.vector_store_specs.items():
+            self._ensure_vector_store(key, spec)
+
         return VectorStoreListResponse(
             stores=[
                 VectorStoreInfo(
@@ -118,6 +399,14 @@ class Orchestrator:
         self,
         request: SimilaritySearchRequest,
     ) -> VectorStoreSearchResponse:
+        if request.store_name not in self.vector_store_specs:
+            raise KeyError(f"Unknown vector store: {request.store_name}")
+
+        self._ensure_vector_store(
+            request.store_name,
+            self.vector_store_specs[request.store_name],
+        )
+
         store = self.vector_stores.get(request.store_name)
 
         results = store.similarity_search(
@@ -143,6 +432,14 @@ class Orchestrator:
         self,
         request: MmrSearchRequest,
     ) -> VectorStoreSearchResponse:
+        if request.store_name not in self.vector_store_specs:
+            raise KeyError(f"Unknown vector store: {request.store_name}")
+
+        self._ensure_vector_store(
+            request.store_name,
+            self.vector_store_specs[request.store_name],
+        )
+
         store = self.vector_stores.get(request.store_name)
 
         results = store.max_marginal_relevance_search(
@@ -161,126 +458,54 @@ class Orchestrator:
 
     def initialize(self, *store_keys: str) -> None:
         if not store_keys:
-            self.vector_stores.initialize_all()
-            return
+            store_keys = tuple(self.vector_store_specs.keys())
 
-        missing = [key for key in store_keys if key not in self.spec.vector_stores]
+        missing = [key for key in store_keys if key not in self.vector_store_specs]
         if missing:
             raise KeyError(f"Unknown vector store(s): {', '.join(missing)}")
 
-        for store_key in store_keys:
-            self.vector_stores.initialize(store_key)
+        for key in store_keys:
+            self._ensure_vector_store(key, self.vector_store_specs[key])
 
-    def build_graph(self, graph_spec: GraphSpec | dict[str, Any]):
-        if not isinstance(graph_spec, GraphSpec):
-            graph_spec = GraphSpec.model_validate(graph_spec)
-
-        if graph_spec.state_key not in state_registry:
-            raise KeyError(f"Unknown state_key: {graph_spec.state_key}")
-
-        state_type = state_registry[graph_spec.state_key]
-        builder = StateGraph(state_type)
-
-        for node_spec in graph_spec.nodes:
-            builder.add_node(node_spec.name, self.nodes.get(node_spec.name))
-
-        edge_sources: set[str] = set()
-        edge_targets: set[str] = set()
-        all_nodes = {node_spec.name for node_spec in graph_spec.nodes}
-
-        for edge in graph_spec.edges:
-            edge_sources.add(edge.source)
-
-            if isinstance(edge, SimpleEdgeSpec):
-                builder.add_edge(edge.source, edge.target)
-                edge_targets.add(edge.target)
-                continue
-
-            if isinstance(edge, RouterEdgeSpec):
-                path_map = dict(edge.routes)
-                if edge.default_target:
-                    path_map["__default__"] = edge.default_target
-
-                edge_targets.update(edge.routes.values())
-                if edge.default_target:
-                    edge_targets.add(edge.default_target)
-
-                def _route_with_default(
-                    state: Any,
-                    *,
-                    _route_field=edge.state_route_field,
-                    _path_map=path_map,
-                    _default=edge.default_target,
-                ) -> str | None:
-                    if isinstance(state, dict):
-                        result = state.get(_route_field)
-                    else:
-                        result = getattr(state, _route_field, None)
-
-                    if result in _path_map:
-                        return result
-                    if _default:
-                        return "__default__"
-                    return result
-
-                builder.add_conditional_edges(
-                    edge.source,
-                    _route_with_default,
-                    path_map=path_map,
-                )
-                continue
-
-            raise TypeError(f"Unsupported edge type: {type(edge)!r}")
-
-        entry_nodes = all_nodes - edge_targets
-        if not entry_nodes and graph_spec.nodes:
-            entry_nodes = {graph_spec.nodes[0].name}
-
-        for entry in entry_nodes:
-            builder.add_edge(START, entry)
-
-        leaf_nodes = all_nodes - edge_sources
-        for leaf in leaf_nodes:
-            builder.add_edge(leaf, END)
-
-        compile_kwargs: dict[str, Any] = {}
-        if graph_spec.compile_args.use_memory:
-            compile_kwargs["checkpointer"] = MemorySaver()
-
-        self.graph = builder.compile(**compile_kwargs)
-        self.spec.graph = graph_spec
-        return self.graph
-
+        for key in store_keys:
+            self.vector_stores.initialize(key)
 
     def _extract_answer_from_state(self, state: AskState | dict[str, Any]) -> str:
         fallback = "I couldn't answer the question."
-        message = None # for linters
+        message = None
 
         answer = state.get("answer") if isinstance(state, dict) else getattr(state, "answer", None)
         if not answer:
             messages = state.get("messages") if isinstance(state, dict) else getattr(state, "messages", None)
             if not messages:
                 return fallback
-            
+
             message = next(
-                (m for m in reversed(messages)
-                if isinstance(m, AIMessage)),
-                messages[-1]
+                (m for m in reversed(messages) if isinstance(m, AIMessage)),
+                messages[-1],
             )
 
         answer = answer or message or fallback
         if isinstance(answer, str):
             return answer
-        
-        return getattr(answer, 'text', fallback) # fallback here is purely for linters
-    
+
+        return getattr(answer, "text", fallback)
+
     def ask(
         self,
         question: str,
         conversation_id: str | None = None,
         debug: bool = False,
     ) -> AskResponse:
-        use_memory = self.spec.graph.compile_args.use_memory
+        graph = self.build_graph()
+
+        if graph is None:
+            raise ValueError("Graph is not available after rebuild.")
+
+        if self.graph_spec is None:
+            raise ValueError("Graph spec is missing.")
+
+        use_memory = self.graph_spec.compile_args.use_memory
         resolved_conversation_id = conversation_id or str(uuid4()) if use_memory else None
 
         input_state = {"question": question}
@@ -289,12 +514,12 @@ class Orchestrator:
         if resolved_conversation_id:
             config = {
                 "configurable": {
-                    "thread_id": resolved_conversation_id
+                    "thread_id": resolved_conversation_id,
                 }
             }
 
-        out = self.graph.invoke(input_state, config=config)
-        state_type = state_registry[self.spec.graph.state_key]
+        out = graph.invoke(input_state, config=config)
+        state_type = state_registry[self.graph_spec.state_key]
 
         if issubclass(state_type, BaseModel):
             result = out if isinstance(out, state_type) else state_type.model_validate(out)

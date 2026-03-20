@@ -30,9 +30,8 @@ class RetrievalNode(BaseNode):
     def from_spec(
         cls,
         spec: RetrieverNodeSpec,
-        **deps: Any,
+        vector_stores: VectorStoreRegistry,
     ) -> "RetrievalNode":
-        vector_stores: VectorStoreRegistry = deps["vector_stores"]
 
         return cls(
             store=vector_stores.get(spec.store_key),

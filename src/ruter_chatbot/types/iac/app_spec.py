@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
+from typing import Literal
 
 from ruter_chatbot.types.iac.graph_spec import GraphSpec
 from ruter_chatbot.types.iac.model_spec import ModelSpec
@@ -8,8 +9,9 @@ from ruter_chatbot.types.iac.pipeline_spec import PipelineSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.vector_store_spec import VectorStoreSpec
 
+SpecKind = Literal["models", "pipelines", "prompts", "vector_stores"]
 
-class AppSpec(BaseModel):
+class OrchestratorSpec(BaseModel):
     models: dict[str, ModelSpec] = Field(default_factory=dict)
     pipelines: dict[str, PipelineSpec] = Field(default_factory=dict)
     prompts: dict[str, PromptSpec] = Field(default_factory=dict)

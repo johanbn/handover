@@ -37,15 +37,15 @@ class LLMNode(BaseNode):
     def from_spec(
         cls,
         spec: LLMNodeSpec,
-        **deps: Any,
+        pipelines: PipelineRegistry,
+        prompts: dict[str, PromptSpec],
     ) -> "LLMNode":
-        prompts: dict[str, PromptSpec] = deps["prompts"]
 
         if spec.prompt_key not in prompts:
             raise KeyError(f"Unknown prompt key: {spec.prompt_key}")
 
         return cls(
-            pipelines=deps["pipelines"],
+            pipelines=pipelines,
             prompt_template=prompts[spec.prompt_key].template,
             pipeline_key=spec.pipeline_key,
             output_key=spec.output_key,
