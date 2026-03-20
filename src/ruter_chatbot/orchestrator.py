@@ -252,21 +252,19 @@ class Orchestrator:
 
 
     def _extract_answer_from_state(self, state: AskState | dict[str, Any]) -> str:
-        if isinstance(state, BaseModel):
-            answer = getattr(state, "answer", None)
-            if answer is not None:
-                return answer
+        fallback = "I couldn't answer the question."
 
-            messages = getattr(state, "messages", None)
-            if messages:
-                return messages[-1]
+        answer = getattr(state, "answer", state.get("answer"))
+        if isinstance(answer, str):
+            return answer
 
-            return "I couldn't answer the question."
+        messages = getattr(state, "messages", state.get("messages"))
+        if isinstance(messages, list) and messages:
+            text = getattr(messages[-1], "text", None)
+            if isinstance(text, str):
+                return text
 
-        return state.get(
-            "answer",
-            state.get("messages", ["I couldn't answer the question."])[-1],
-        )
+        return fallback
     
     def ask(
         self,
