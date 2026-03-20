@@ -4,7 +4,6 @@ import subprocess
 from typing import Any
 
 import boto3
-from langchain_aws import ChatBedrockConverse
 
 from ruter_chatbot.types.iac.model_spec import ModelSpec
 
