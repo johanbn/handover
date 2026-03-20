@@ -1,11 +1,12 @@
-from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from ruter_chatbot.specs.state import AskState
 
 
 class AskResponse(BaseModel):
     answer: str
     conversation_id: str | None = None
-    state: dict[str, Any] | None = None
+    state: AskState | None = None
 
 
 class AskRequest(BaseModel):

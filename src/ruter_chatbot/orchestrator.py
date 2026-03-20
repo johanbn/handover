@@ -12,7 +12,7 @@ from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.specs.state import state_registry
 from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
-from ruter_chatbot.types.app.ask import AskResponse
+from ruter_chatbot.types.app.ask import AskResponse, AskState
 from ruter_chatbot.types.app.vector_store import (
     MmrSearchRequest,
     SimilaritySearchRequest,
@@ -170,16 +170,6 @@ class Orchestrator:
         for store_key in store_keys:
             self.vector_stores.initialize(store_key)
 
-    def initialize_graph_dependencies(self) -> None:
-        store_keys = {
-            node_spec.store_key
-            for node_spec in self.spec.graph.nodes
-            if getattr(node_spec, "kind", None) == "retriever"
-        }
-
-        if store_keys:
-            self.initialize(*store_keys)
-
     def build_graph(self, graph_spec: GraphSpec | dict[str, Any]):
         if not isinstance(graph_spec, GraphSpec):
             graph_spec = GraphSpec.model_validate(graph_spec)
@@ -260,6 +250,24 @@ class Orchestrator:
         self.spec.graph = graph_spec
         return self.graph
 
+
+    def _extract_answer_from_state(self, state: AskState | dict[str, Any]) -> str:
+        if isinstance(state, BaseModel):
+            answer = getattr(state, "answer", None)
+            if answer is not None:
+                return answer
+
+            messages = getattr(state, "messages", None)
+            if messages:
+                return messages[-1]
+
+            return "I couldn't answer the question."
+
+        return state.get(
+            "answer",
+            state.get("messages", ["I couldn't answer the question."])[-1],
+        )
+    
     def ask(
         self,
         question: str,
@@ -284,17 +292,11 @@ class Orchestrator:
 
         if issubclass(state_type, BaseModel):
             result = out if isinstance(out, state_type) else state_type.model_validate(out)
-            result_dict = result.model_dump()
         else:
-            result_dict = out
-
-        answer = result_dict.get(
-            "answer",
-            result_dict.get("messages", ["I couldn't answer the question."])[-1],
-        )
+            result = out
 
         return AskResponse(
-            answer=answer,
+            answer=self._extract_answer_from_state(result),
             conversation_id=resolved_conversation_id if use_memory else None,
-            state=result_dict if debug else None,
+            state=result if debug else None,
         )

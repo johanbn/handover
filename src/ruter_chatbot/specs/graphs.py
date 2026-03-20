@@ -48,7 +48,7 @@ conditional_demo = GraphSpec(
     
 aws_demo = GraphSpec(
         state_key="structured_rag",
-        compile_args=GraphCompileArgs(use_memory=False),
+        compile_args=GraphCompileArgs(use_memory=True),
         nodes=[
             r.retriever_ruter_aws,
             g.llm_claude_rag_no_history_answer,
