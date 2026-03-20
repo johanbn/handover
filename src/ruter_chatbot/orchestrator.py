@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
@@ -252,19 +253,26 @@ class Orchestrator:
 
 
     def _extract_answer_from_state(self, state: AskState | dict[str, Any]) -> str:
-        fallback = "I couldn't answer the question."
+        fb = "I couldn't answer the question."
+        message = fb
 
-        answer = getattr(state, "answer", state.get("answer"))
+        answer = state.get("answer") if isinstance(state, dict) else getattr(state, "answer", None)
+        if not answer:
+            messages = state.get("messages") if isinstance(state, dict) else getattr(state, "messages", None)
+            if not messages:
+                return message
+            
+            message = next(
+                (m for m in reversed(messages)
+                if isinstance(m, AIMessage)),
+                messages[-1]
+            )
+
+        answer = answer or message
         if isinstance(answer, str):
             return answer
-
-        messages = getattr(state, "messages", state.get("messages"))
-        if isinstance(messages, list) and messages:
-            text = getattr(messages[-1], "text", None)
-            if isinstance(text, str):
-                return text
-
-        return fallback
+        
+        return getattr(answer, 'text', fb) # fb is not needed here except to stop linter complaints.
     
     def ask(
         self,
