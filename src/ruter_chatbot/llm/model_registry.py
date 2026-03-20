@@ -5,7 +5,6 @@ from typing import Any
 
 import boto3
 from langchain_aws import ChatBedrockConverse
-from langchain_ollama import ChatOllama
 
 from ruter_chatbot.types.iac.model_spec import ModelSpec
 
@@ -23,6 +22,15 @@ class ModelRegistry:
             raise ValueError(f"Unsupported model type: {spec.type}")
 
     def _load_ollama_model(self, spec: ModelSpec) -> None:
+        try:
+            from langchain_ollama import ChatOllama
+        except ImportError:
+            raise RuntimeError(
+                "Cannot load Ollama model: langchain-ollama is not installed.\n"
+                "This is intended in production.\n"
+                "Avoid using Ollama models in production."
+            ) from None
+
         model_name = spec.args.get("model")
         if not model_name:
             raise ValueError("ModelSpec.args must include 'model' for ollama_model")
@@ -44,6 +52,13 @@ class ModelRegistry:
         }
 
     def _load_bedrock_model(self, spec: ModelSpec) -> None:
+        try:
+            from langchain_aws import ChatBedrockConverse
+        except ImportError:
+            raise RuntimeError(
+                "Cannot load Bedrock model: langchain-aws is not installed."
+            ) from None
+
         model_id = spec.args.get("model")
         region_name = spec.args.get("region_name") or spec.args.get("region") or "eu-west-1"
 

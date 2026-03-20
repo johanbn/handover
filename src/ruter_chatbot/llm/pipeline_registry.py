@@ -48,13 +48,25 @@ class PipelineRegistry:
         provider = model_entry.get("provider")
 
         if provider == "ollama":
-            from langchain_ollama import ChatOllama
+            try:
+                from langchain_ollama import ChatOllama
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot load Ollama model: langchain-ollama is not installed.\n"
+                    "This is intended in production.\n"
+                    "Avoid using Ollama models in production."
+                ) from None
 
             return ChatOllama(**merged_args)
 
         if provider == "bedrock":
             import boto3
-            from langchain_aws import ChatBedrockConverse
+            try:
+                from langchain_aws import ChatBedrockConverse
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot load Bedrock model: langchain-aws is not installed."
+                ) from None
 
             region_name = (
                 merged_args.pop("region_name", None)

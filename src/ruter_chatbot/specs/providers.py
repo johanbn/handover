@@ -12,6 +12,10 @@ ruterwiki_ks_intern = ProviderSpec(
         "include_labels": True
     }
 )
+'''
+Permissive Provider for RuterWiki limited to the KS space.
+'''
+
 ruterwiki_ks_extern = ProviderSpec(
     type="confluence",
     args={
@@ -21,3 +25,6 @@ ruterwiki_ks_extern = ProviderSpec(
         "required_label": "cb-ekstern"
     }
 )
+'''
+Restrictive Provider for RuterWiki limited to pages labeled 'cb-ekstern' in the KS space.
+'''

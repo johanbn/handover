@@ -2,7 +2,6 @@
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 
 
-# example
 naive = PromptSpec(
     key="naive",
     template="""Question: {question}
@@ -11,6 +10,9 @@ Context: {context}
 
 Answer:"""
 )
+'''
+A prompt that does the bare minimum.
+'''
 
 concise = PromptSpec(
     key="concise",
@@ -23,6 +25,7 @@ Context: {context}
 
 Answer:"""
 )
+'''`naive` + instruction to be concise based on context.'''
 
 first_person_informative_chatbot_norwegian = PromptSpec(
     key="norwegian_chat",
@@ -43,9 +46,13 @@ Kontekst: {context}
 
 Svar:"""
 )
+'''
+Norwegian-language prompt with informative descriptions
+delivered conventionally and logically, but in first-person.
+'''
 
-intent_prompt = PromptSpec(
-    key="intent_prompt",
+search_or_chat_route_norwegian = PromptSpec(
+    key="search_or_chat_route_norwegian",
     template="""\
 Du er en rutingsklassifiserer for en Ruter-chatbot.
 
@@ -67,9 +74,12 @@ Spørsmål:
 
 Svar:""",
 )
+'''
+Norwegian-language prompt for route-selection between chat and search.
+'''
 
-rag_prompt = PromptSpec(
-    key="rag_prompt",
+brief_rag_norwegian = PromptSpec(
+    key="brief_rag_norwegian",
     template="""\
 Du er en hjelpsom og presis kundeserviceassistent for Ruter.
 
@@ -88,9 +98,12 @@ Kontekst:
 
 Svar:""",
 )
+'''
+Norwegian-language prompt with brief rules.
+'''
 
-route_aware_rag_norwegian = PromptSpec(
-    key="route_aware_rag_norwegian",
+past_answer_aware_rag_norwegian = PromptSpec(
+    key="past_answer_aware_rag_norwegian",
     template="""\
 Du er en hjelpsom og presis kundeserviceassistent for Ruter.
 
@@ -102,7 +115,6 @@ Du får tre felter:
 Slik skal feltene brukes:
 - Bruk question til å forstå hva brukeren spør om.
 - Bruk context som hovedgrunnlag for svaret.
-- Bruk route kun som en ekstra ledetråd dersom den er relevant.
 - Bruk answer bare dersom det inneholder et tidligere utkast som skal forbedres eller korrigeres.
 
 Regler:
@@ -127,17 +139,20 @@ Tidligere svarutkast:
 
 Endelig svar:""",
 )
+'''
+Norwegian-language prompt that with detailed descriptions of what
+the LLM will see and rules for what to do with it.
+Includes a field for previous answers as an additional resource.
+'''
 
 PROMPTS: dict[str, PromptSpec] = {
     "naive": naive,
     "concise": concise,
     "norwegian_chat": first_person_informative_chatbot_norwegian,
-    "intent_prompt": intent_prompt,
-    "rag_prompt": rag_prompt,
-    "route_aware_rag_norwegian": route_aware_rag_norwegian,
+    "search_or_chat_route_norwegian": search_or_chat_route_norwegian,
+    "brief_rag_norwegian": brief_rag_norwegian,
+    "past_answer_aware_rag_norwegian": past_answer_aware_rag_norwegian,
 }
-
 '''
-May be more of a registry. Holds known prompt templates, keyed by name.
-If the key exists here, it can be used by a Graph through a GraphSpec.
+Registry of prompts that are in active use.
 '''

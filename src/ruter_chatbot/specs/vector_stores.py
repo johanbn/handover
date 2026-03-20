@@ -3,17 +3,31 @@ from ruter_chatbot.specs.providers import ruterwiki_ks_extern, ruterwiki_ks_inte
 from ruter_chatbot.specs.embedders import EMBEDDERS
 from ruter_chatbot.specs.chunkers import default_chunker
 
+ruter_store: VectorStoreSpec = VectorStoreSpec(
+    name="ruter_store",
+    provider=ruterwiki_ks_extern,
+    embedder=EMBEDDERS["nomic-embed-text"],
+    chunker=default_chunker,
+)
+'''
+Locally hosted VectorStore for Ruter.
+NOTE: locally hosted things do not work for production!
+'''
+
+ruter_store_aws = VectorStoreSpec(
+    name="ruter_store_aws",
+    provider=ruterwiki_ks_intern,
+    embedder=EMBEDDERS["cohere-bedrock-multilingual"],
+    chunker=default_chunker,
+)
+'''
+AWS-hosted VectorStore for Ruter.
+'''
+
 VECTOR_STORES = {
-    "ruter_store": VectorStoreSpec(
-        name="ruter_store",
-        provider=ruterwiki_ks_extern,
-        embedder=EMBEDDERS["nomic-embed-text"],
-        chunker=default_chunker,
-    ),
-    "ruter_store_aws": VectorStoreSpec(
-        name="ruter_store_aws",
-        provider=ruterwiki_ks_intern,
-        embedder=EMBEDDERS["cohere-bedrock-multilingual"],
-        chunker=default_chunker,
-    ),
+    "ruter_store": ruter_store,
+    "ruter_store_aws": ruter_store_aws,
 }
+'''
+Registry of VectorStores in active use.
+'''

@@ -10,8 +10,6 @@ from tqdm import tqdm
 
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
-from langchain_aws import BedrockEmbeddings
-from langchain_ollama import OllamaEmbeddings
 
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
 from ruter_chatbot.stores.smart_chunker import SmartChunker
@@ -94,6 +92,14 @@ class VectorStore:
         embed_args = dict(embed_spec.args)
 
         if embed_type == "ollama":
+            try:
+                from langchain_ollama import OllamaEmbeddings
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot load Ollama embedding: langchain-ollama is not installed.\n"
+                    "This is intended in production.\n"
+                    "Avoid using Ollama embeddings in production."
+                ) from None
             model_name = embed_args.get("model")
             if not model_name:
                 raise ValueError("EmbedSpec.args must include 'model' for ollama")
@@ -111,6 +117,13 @@ class VectorStore:
             return OllamaEmbeddings(**embed_args)
 
         if embed_type == "bedrock":
+            try:
+                from langchain_aws import BedrockEmbeddings
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot load Bedrock Embedding: langchain_aws is not installed."
+                ) from None
+
             model_id = embed_args.pop("model_id", None)
             region_name = embed_args.pop("region_name", "eu-west-1")
 

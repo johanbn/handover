@@ -1,75 +1,21 @@
-from ruter_chatbot.types.iac.graph_spec import GraphSpec, GraphCompileArgs
-from ruter_chatbot.types.iac.node_spec import (
-    LLMNodeSpec,
-    RetrieverNodeSpec,
-)
-from ruter_chatbot.types.iac.edge_spec import (
-    SimpleEdgeSpec,
-    RouterEdgeSpec,
-)
+import ruter_chatbot.specs.nodes.generators as g
+import ruter_chatbot.specs.nodes.retrievers as r
 
+from ruter_chatbot.types.iac.graph_spec import GraphSpec, GraphCompileArgs
+from ruter_chatbot.types.iac.edge_spec import EdgeSpec
 
 demo = GraphSpec( 
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
-            RetrieverNodeSpec(
-                name="retrieve_docs",
-                kind="retriever",
-                store_key="ruter_store_aws",  # ruter_store
-                top_k=5,
-                output_key="docs",
-            ),
-            LLMNodeSpec(
-                name="generate_answer",
-                kind="llm",
-                pipeline_key="qwen_medium",
-                prompt_key="naive",
-                include_history=False,
-                output_key="answer",
-            ),
-            # LLMNodeSpec(
-            #     name="generate_fast_answer",
-            #     kind="llm",
-            #     pipeline_key="llama_fast",
-            #     prompt_key="naive",
-            #     include_history=False,
-            #     output_key="answer",
-            # ),
-            # LLMNodeSpec(
-            #     name="generate_strict_answer",
-            #     kind="llm",
-            #     pipeline_key="mistral_precise",
-            #     prompt_key="route_aware_rag_norwegian",
-            #     include_history=False,
-            #     output_key="answer",
-            # ),
+            r.retriever_ruter_aws,
+            g.llm_qwen_medium_answer,
         ],
         edges=[
-            SimpleEdgeSpec(
-                source="retrieve_docs",
-                target="generate_answer",
-            ),
-
-            # --- Showcase edges (disabled examples) ---
-            # SimpleEdgeSpec(
-            #     source="retrieve_docs",
-            #     target="generate_fast_answer",
-            # ),
-            # SimpleEdgeSpec(
-            #     source="retrieve_docs",
-            #     target="generate_strict_answer",
-            # ),
-            # RouterEdgeSpec(
-            #     source="retrieve_docs",
-            #     state_route_field="route",
-            #     routes={
-            #         "fast": "generate_fast_answer",
-            #         "strict": "generate_strict_answer",
-            #         "balanced": "generate_answer",
-            #     },
-            #     default_target="generate_answer",
-            # ),
+            EdgeSpec(
+                source=r.retriever_ruter_aws.name,
+                target=g.llm_qwen_medium_answer.name,
+            )
         ],
     )
 ''' Different demo setup'''
@@ -78,57 +24,24 @@ conditional_demo = GraphSpec(
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=True),
         nodes=[
-            LLMNodeSpec(
-                name="intent_classifier",
-                kind="llm",
-                pipeline_key="claude_bedrock_rag",
-                prompt_key="intent_prompt",
-                output_key="route",
-            ),
-            RetrieverNodeSpec(
-                name="retrieve_docs",
-                kind="retriever",
-                store_key="ruter_store_aws",
-                search_type="mmr",
-                top_k=15,
-                fetch_k=40,
-                lambda_mult=0.5,
-                output_key="docs",
-            ),
-            LLMNodeSpec(
-                name="generate_answer",
-                kind="llm",
-                pipeline_key="claude_bedrock_rag",
-                prompt_key="rag_prompt",
-                output_key="answer",
-            ),
+            g.llm_claude_route_choice,
+            r.retriever_ruter_aws_big,
+            g.llm_claude_rag_answer,
         ],
         edges=[
-            RouterEdgeSpec(
-                source="intent_classifier",
+            EdgeSpec(
+                source=g.llm_claude_route_choice.name,
                 state_route_field="route",
                 routes={
-                    "search": "retrieve_docs",
-                    "chat": "generate_answer",
+                    "search": r.retriever_ruter_aws_big.name,
+                    "chat": g.llm_claude_rag_answer.name,
                 },
-                default_target="generate_answer",
+                default_target=g.llm_claude_rag_answer.name,
             ),
-            SimpleEdgeSpec(
-                source="retrieve_docs",
-                target="generate_answer",
+            EdgeSpec(
+                source=r.retriever_ruter_aws_big.name,
+                target=g.llm_claude_rag_answer.name,
             ),
-
-            # --- Showcase edges (disabled examples) ---
-            # RouterEdgeSpec(
-            #     source="intent_classifier",
-            #     state_route_field="route",
-            #     routes={
-            #         "search": "retrieve_docs",
-            #         "chat": "generate_answer",
-            #         "smalltalk": "generate_answer",
-            #     },
-            #     default_target="generate_answer",
-            # ),
         ],
     )
 '''Demo of conditional branching'''
@@ -137,26 +50,13 @@ aws_demo = GraphSpec(
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
-            RetrieverNodeSpec(
-                name="retrieve_docs_aws",
-                kind="retriever",
-                store_key="ruter_store_aws",  # ruter_store
-                top_k=5,
-                output_key="docs",
-            ),
-            LLMNodeSpec(
-                name="generate_answer_aws",
-                kind="llm",
-                pipeline_key="claude_bedrock_rag",
-                prompt_key="rag_prompt",
-                include_history=False,
-                output_key="answer",
-            ),
+            r.retriever_ruter_aws,
+            g.llm_claude_rag_no_history_answer,
         ],
         edges=[
-            SimpleEdgeSpec(
-                source="retrieve_docs_aws",
-                target="generate_answer_aws",
+            EdgeSpec(
+                source=r.retriever_ruter_aws.name,
+                target=g.llm_claude_rag_no_history_answer,
             ),
         ],
     )
@@ -164,7 +64,9 @@ aws_demo = GraphSpec(
 
 
 
-GRAPHS: dict[str, GraphSpec] = {"demo": demo,
-          "conditional_demo": conditional_demo,
-          "aws_demo": aws_demo
+GRAPHS: dict[str, GraphSpec] = {
+    #"demo": demo,
+    "conditional_demo": conditional_demo,
+    "aws_demo": aws_demo,
 }
+'''Registry of Graphs that are in active use.'''
