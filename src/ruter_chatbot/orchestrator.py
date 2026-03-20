@@ -253,14 +253,14 @@ class Orchestrator:
 
 
     def _extract_answer_from_state(self, state: AskState | dict[str, Any]) -> str:
-        fb = "I couldn't answer the question."
-        message = fb
+        fallback = "I couldn't answer the question."
+        message = None # for linters
 
         answer = state.get("answer") if isinstance(state, dict) else getattr(state, "answer", None)
         if not answer:
             messages = state.get("messages") if isinstance(state, dict) else getattr(state, "messages", None)
             if not messages:
-                return message
+                return fallback
             
             message = next(
                 (m for m in reversed(messages)
@@ -268,11 +268,11 @@ class Orchestrator:
                 messages[-1]
             )
 
-        answer = answer or message
+        answer = answer or message or fallback
         if isinstance(answer, str):
             return answer
         
-        return getattr(answer, 'text', fb) # fb is not needed here except to stop linter complaints.
+        return getattr(answer, 'text', fallback) # fallback here is purely for linters
     
     def ask(
         self,
