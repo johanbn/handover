@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any
 from pydantic import BaseModel, Field
 
 
@@ -11,12 +11,17 @@ class VectorStoreListResponse(BaseModel):
     stores: list[VectorStoreInfo]
 
 
-class VectorStoreSearchRequest(BaseModel):
+class SimilaritySearchRequest(BaseModel):
     store_name: str
     query: str
-    method: Literal["similarity", "mmr"] = "similarity"
     k: int = 4
     with_score: bool = False
+
+
+class MmrSearchRequest(BaseModel):
+    store_name: str
+    query: str
+    k: int = 4
     fetch_k: int = 20
     lambda_mult: float = 0.5
 
@@ -29,14 +34,13 @@ class VectorStoreSearchHit(BaseModel):
 
 class VectorStoreSearchResponse(BaseModel):
     store_name: str
-    method: Literal["similarity", "mmr"]
     query: str
     k: int
     hits: list[VectorStoreSearchHit]
 
 
 class InitializeVectorStoresRequest(BaseModel):
-    store_keys: list[str] = []
+    store_keys: list[str] = Field(default_factory=list)
 
 
 class InitializeVectorStoresResponse(BaseModel):

@@ -7,8 +7,9 @@ from ruter_chatbot.types.app.ask import AskRequest, AskResponse
 from ruter_chatbot.types.app.vector_store import (
     InitializeVectorStoresRequest,
     InitializeVectorStoresResponse,
+    MmrSearchRequest,
+    SimilaritySearchRequest,
     VectorStoreListResponse,
-    VectorStoreSearchRequest,
     VectorStoreSearchResponse,
 )
 from ruter_chatbot.types.iac.app_spec import AppSpec
@@ -17,7 +18,7 @@ app = FastAPI()
 # security middleware, etc.
 
 orch = Orchestrator(APP)
-#orch.initialize("ruter_store_aws")
+# orch.initialize("ruter_store_aws")
 
 
 @app.get("/")
@@ -27,7 +28,8 @@ async def root_info():
 Hei, du har nådd roten av Ruters Chatbot-API for kundeservice.
 Besøk samme addressen /docs for mer informasjon om hvordan du kan bruke dette APIet.
 """
-}
+    }
+
 
 # endpoints that use the Orchestrator
 # NOTE: If this file gets crowded we move app definition to app.py
@@ -46,11 +48,11 @@ async def confluence_test():
     if not sources:
         return {"error": "Could not find any sources."}
 
-    source = sources[randint(0, len(sources))]
+    source = sources[randint(0, len(sources) - 1)]
     docs = provider.get_docs_from_source(source)
     return {
         "source": source,
-        "docs": docs
+        "docs": docs,
     }
 
 
@@ -63,21 +65,30 @@ def list_vector_stores() -> VectorStoreListResponse:
     return orch.list_vector_stores()
 
 
-@app.post("/vector-stores/search", response_model=VectorStoreSearchResponse)
-def search_vector_store(
-    req: VectorStoreSearchRequest,
-) -> VectorStoreSearchResponse:
-    return orch.search_vector_store(req)
-
-
-@app.post("/vector-stores/initialize")
-def initialize_vector_stores(req: InitializeVectorStoresRequest) -> dict[str, str]:
+@app.post("/vector-stores/initialize", response_model=InitializeVectorStoresResponse)
+def initialize_vector_stores(
+    req: InitializeVectorStoresRequest,
+) -> InitializeVectorStoresResponse:
     if req.store_keys:
         orch.initialize(*req.store_keys)
     else:
         orch.initialize()
 
-    return {"status": "ok"}
+    return InitializeVectorStoresResponse(status="ok")
+
+
+@app.post("/vector-stores/search/similarity", response_model=VectorStoreSearchResponse)
+def search_vector_store_similarity(
+    req: SimilaritySearchRequest,
+) -> VectorStoreSearchResponse:
+    return orch.search_vector_store_similarity(req)
+
+
+@app.post("/vector-stores/search/mmr", response_model=VectorStoreSearchResponse)
+def search_vector_store_mmr(
+    req: MmrSearchRequest,
+) -> VectorStoreSearchResponse:
+    return orch.search_vector_store_mmr(req)
 
 
 @app.post("/ask", response_model=AskResponse)

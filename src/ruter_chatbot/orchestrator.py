@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 from uuid import uuid4
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -14,10 +14,11 @@ from ruter_chatbot.specs.state import state_registry
 from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
 from ruter_chatbot.types.app.ask import AskResponse
 from ruter_chatbot.types.app.vector_store import (
+    MmrSearchRequest,
+    SimilaritySearchRequest,
     VectorStoreInfo,
     VectorStoreListResponse,
     VectorStoreSearchHit,
-    VectorStoreSearchRequest,
     VectorStoreSearchResponse,
 )
 from ruter_chatbot.types.iac.app_spec import AppSpec
@@ -75,10 +76,7 @@ class Orchestrator:
             ]
         )
 
-    def _build_hits(
-        self,
-        docs: list[Any],
-    ) -> list[VectorStoreSearchHit]:
+    def _build_hits(self, docs: list[Any]) -> list[VectorStoreSearchHit]:
         return [
             VectorStoreSearchHit(
                 page_content=doc.page_content,
@@ -104,47 +102,48 @@ class Orchestrator:
         self,
         *,
         store_name: str,
-        method: Literal["similarity", "mmr"],
         query: str,
         k: int,
         hits: list[VectorStoreSearchHit],
     ) -> VectorStoreSearchResponse:
         return VectorStoreSearchResponse(
             store_name=store_name,
-            method=method,
             query=query,
             k=k,
             hits=hits,
         )
 
-    def search_vector_store(
+    def search_vector_store_similarity(
         self,
-        request: VectorStoreSearchRequest,
+        request: SimilaritySearchRequest,
     ) -> VectorStoreSearchResponse:
         store = self.vector_stores.get(request.store_name)
 
-        if request.method == "similarity":
-            results = store.similarity_search(
-                request.query,
-                k=request.k,
-                with_score=request.with_score,
-            )
+        results = store.similarity_search(
+            request.query,
+            k=request.k,
+            with_score=request.with_score,
+        )
 
-            hits = (
-                self._build_scored_hits(results)
-                if request.with_score
-                else self._build_hits(results)
-            )
+        hits = (
+            self._build_scored_hits(results)
+            if request.with_score
+            else self._build_hits(results)
+        )
 
-            return self._search_response(
-                store_name=request.store_name,
-                method="similarity",
-                query=request.query,
-                k=request.k,
-                hits=hits,
-            )
+        return self._search_response(
+            store_name=request.store_name,
+            query=request.query,
+            k=request.k,
+            hits=hits,
+        )
 
-        # mmr
+    def search_vector_store_mmr(
+        self,
+        request: MmrSearchRequest,
+    ) -> VectorStoreSearchResponse:
+        store = self.vector_stores.get(request.store_name)
+
         results = store.max_marginal_relevance_search(
             request.query,
             k=request.k,
@@ -154,7 +153,6 @@ class Orchestrator:
 
         return self._search_response(
             store_name=request.store_name,
-            method="mmr",
             query=request.query,
             k=request.k,
             hits=self._build_hits(results),
