@@ -2,7 +2,7 @@ import ruter_chatbot.specs.nodes.generators as g
 import ruter_chatbot.specs.nodes.retrievers as r
 
 from ruter_chatbot.types.iac.graph_spec import GraphSpec, GraphCompileArgs
-from ruter_chatbot.types.iac.edge_spec import EdgeSpec
+from ruter_chatbot.types.iac.edge_spec import SimpleEdgeSpec, RouterEdgeSpec
 
 demo = GraphSpec( 
         state_key="structured_rag",
@@ -12,7 +12,7 @@ demo = GraphSpec(
             g.llm_qwen_medium_answer,
         ],
         edges=[
-            EdgeSpec(
+            SimpleEdgeSpec(
                 source=r.retriever_ruter_aws.name,
                 target=g.llm_qwen_medium_answer.name,
             )
@@ -29,7 +29,7 @@ conditional_demo = GraphSpec(
             g.llm_claude_rag_answer,
         ],
         edges=[
-            EdgeSpec(
+            RouterEdgeSpec(
                 source=g.llm_claude_route_choice.name,
                 state_route_field="route",
                 routes={
@@ -38,7 +38,7 @@ conditional_demo = GraphSpec(
                 },
                 default_target=g.llm_claude_rag_answer.name,
             ),
-            EdgeSpec(
+            SimpleEdgeSpec(
                 source=r.retriever_ruter_aws_big.name,
                 target=g.llm_claude_rag_answer.name,
             ),
@@ -54,9 +54,9 @@ aws_demo = GraphSpec(
             g.llm_claude_rag_no_history_answer,
         ],
         edges=[
-            EdgeSpec(
+            SimpleEdgeSpec(
                 source=r.retriever_ruter_aws.name,
-                target=g.llm_claude_rag_no_history_answer,
+                target=g.llm_claude_rag_no_history_answer.name,
             ),
         ],
     )

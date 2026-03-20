@@ -3,9 +3,9 @@ Provides various RetrieverNodeSpecs.
 Note that node names must be unique within a GraphSpec.
 However, they can be reused between GraphSpecs.
 '''
-from ruter_chatbot.types.iac.node_spec import NodeSpec
+from ruter_chatbot.types.iac.node_spec import NodeSpec, RetrieverNodeSpec
 
-retriever_ruter_aws: NodeSpec = NodeSpec(
+retriever_ruter_aws: NodeSpec = RetrieverNodeSpec(
     name="retrieve_docs",
     kind="retriever",
     store_key="ruter_store_aws",
@@ -14,7 +14,7 @@ retriever_ruter_aws: NodeSpec = NodeSpec(
 )
 '''Generic retriever for AWS-based ruter store.'''
 
-retriever_ruter_local: NodeSpec = NodeSpec(
+retriever_ruter_local: NodeSpec = RetrieverNodeSpec(
     name="retrieve_docs",
     kind="retriever",
     store_key="ruter_store",
@@ -23,7 +23,7 @@ retriever_ruter_local: NodeSpec = NodeSpec(
 )
 '''Generic retriever for local ruter store.'''
 
-retriever_ruter_aws_big: NodeSpec = NodeSpec(
+retriever_ruter_aws_big: NodeSpec = RetrieverNodeSpec(
     name="retrieve_docs",
     kind="retriever",
     store_key="ruter_store_aws",
