@@ -30,7 +30,7 @@ from ruter_chatbot.types.iac.model_spec import ModelSpec
 from ruter_chatbot.types.iac.node_spec import LLMNodeSpec, RetrieverNodeSpec
 from ruter_chatbot.types.iac.pipeline_spec import PipelineSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
-from ruter_chatbot.types.iac.state_spec import RagState
+from ruter_chatbot.types.iac.vector_store_spec import VectorStoreSpec
 from ruter_chatbot.graph.graph_builder import GraphBuilder
 
 logging.getLogger("langchain_aws").setLevel(logging.WARNING)
