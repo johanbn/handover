@@ -5,18 +5,24 @@ import importlib
 import json
 import pkgutil
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterator, Mapping, Optional, Sequence, Type
+from typing import Any, Dict, Iterator, Mapping, Sequence, Type
 
 from langchain_core.documents import Document
 
-from ruter_chatbot.types.iac.provider_spec import ProviderSpec
+from ruter_chatbot.types.iac.provider_spec import (
+    CompositeProviderSpec,
+    ProviderSpec,
+    ProviderSpecLike,
+)
+from ruter_chatbot.types.spec_based import SpecBased
 from ruter_chatbot.types.source import Source
 
 
-class BaseProvider(ABC):
+class BaseProvider(SpecBased[ProviderSpec], ABC):
     REGISTRY: Dict[str, Type["BaseProvider"]] = {}
     _PLUGINS_LOADED: bool = False
     PLUGIN_PACKAGE = "ruter_chatbot.stores.providers"
+    spec_class = ProviderSpec
 
     def __init__(self, **spec: Any):
         self.spec = spec
@@ -51,8 +57,12 @@ class BaseProvider(ABC):
         cls,
         spec: Mapping[str, Any]
         | ProviderSpec
+        | CompositeProviderSpec
         | Sequence[Mapping[str, Any] | ProviderSpec],
     ) -> BaseProvider:
+        if isinstance(spec, CompositeProviderSpec):
+            spec = spec.root
+
         if isinstance(spec, Sequence) and not isinstance(
             spec, (str, bytes, bytearray, Mapping)
         ):
@@ -65,9 +75,7 @@ class BaseProvider(ABC):
                 }
             )
 
-        spec_obj = (
-            spec if isinstance(spec, ProviderSpec) else ProviderSpec.model_validate(spec)
-        )
+        spec_obj = ProviderSpec.model_validate(spec)
         key = spec_obj.type
 
         if key not in cls.REGISTRY:
@@ -117,6 +125,10 @@ class BaseProvider(ABC):
             )
 
         return stamped_sources
+    
+    @abstractmethod
+    def to_spec(self) -> ProviderSpecLike:
+        ...
 
     @abstractmethod
     def _iter_sources(self) -> Iterator[Source]:

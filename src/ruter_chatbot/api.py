@@ -17,7 +17,7 @@ from ruter_chatbot.types.iac.app_spec import AppSpec
 app = FastAPI()
 # security middleware, etc.
 
-orch = Orchestrator(APP)
+orch = Orchestrator.from_spec(APP)
 # orch.initialize("ruter_store_aws")
 
 

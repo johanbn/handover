@@ -5,6 +5,7 @@ from typing import Any, Iterator, Sequence
 from langchain_core.documents import Document
 
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
+from ruter_chatbot.types.iac.provider_spec import CompositeProviderSpec, ProviderSpec
 from ruter_chatbot.types.source import Source
 
 
@@ -31,6 +32,18 @@ class CompositeProvider(BaseProvider):
         self._providers_by_id: dict[str, BaseProvider] = {
             p.provider_id: p for p in self.providers
         }
+    
+    def to_spec(self) -> CompositeProviderSpec:
+        specs: list[ProviderSpec] = []
+        for provider in self.providers:
+            provider_spec = provider.to_spec()
+            if not isinstance(provider_spec, ProviderSpec):
+                raise TypeError(
+                    "CompositeProvider only supports child providers that serialize "
+                    "to ProviderSpec."
+                )
+            specs.append(provider_spec)
+        return CompositeProviderSpec(root=specs)
 
     def _iter_sources(self) -> Iterator[Source]:
         """

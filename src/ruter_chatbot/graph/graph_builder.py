@@ -5,15 +5,27 @@ from typing import Any
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
+from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
 from ruter_chatbot.graph.node_builder import NodeBuilder
 from ruter_chatbot.specs.state import state_registry
 from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
 from ruter_chatbot.types.iac.graph_spec import GraphSpec
+from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 
 
 class GraphBuilder:
-    def __init__(self, nodes: NodeBuilder) -> None:
-        self.nodes = nodes
+    def __init__(
+        self,
+        pipelines: PipelineRegistry,
+        vector_stores: VectorStoreRegistry,
+        prompts: dict[str, PromptSpec]
+    ) -> None:
+        self.nodes = NodeBuilder(
+            pipelines=pipelines,
+            vector_stores=vector_stores,
+            prompts=prompts
+        )
 
     def build(self, graph_spec: GraphSpec | dict[str, Any]):
         if not isinstance(graph_spec, GraphSpec):

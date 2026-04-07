@@ -51,7 +51,7 @@ def main() -> None:
                             "glob": "*.md",
                         },
                     },
-                    ruterwiki_ks
+                    ruterwiki_ks_extern
                 ]
             },
         }

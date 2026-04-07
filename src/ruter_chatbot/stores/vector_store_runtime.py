@@ -1,3 +1,7 @@
+import hashlib
+import json
+import os
+import shutil
 import subprocess
 import threading
 from datetime import datetime, timedelta
@@ -9,10 +13,15 @@ import boto3
 from tqdm import tqdm
 
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_community.vectorstores import FAISS
 
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
 from ruter_chatbot.stores.smart_chunker import SmartChunker
+from ruter_chatbot.types.iac.embed_spec import EmbedSpec
+from ruter_chatbot.types.iac.vector_store_spec import VectorStoreSpec
+from ruter_chatbot.types.keyed import Keyed
+from ruter_chatbot.types.spec_based import SpecBased
 from ruter_chatbot.logger import get_logger
 logger = get_logger(__name__)
 
@@ -24,33 +33,41 @@ class VectorStoreState(str, Enum):
     FAILED = "failed"
 
 
-class VectorStore:
+class VectorStoreRuntime(SpecBased[VectorStoreSpec], Keyed):
     """
     Thread-based runtime service for document retrieval + FAISS index lifecycle.
 
     Lifecycle
     ---------
     - from_spec() creates the store
-    - initialize() builds the first index (blocking)
+    - initialize() loads a cached FAISS snapshot if available, otherwise builds
+      the first index (blocking)
     - refresh() rebuilds and swaps in a new index (blocking)
     - start_refresh() rebuilds and swaps in a new index (background thread)
     - start_daily_refresh_loop() runs recurring background refresh
     - searches always use the current active index
     - active index is only swapped when the new one is fully built
     """
+    spec_class = VectorStoreSpec
+    CACHE_ENV_VAR = "VECTOR_STORE_CACHE_DIR"
+    DEFAULT_CACHE_ROOT = ".local/vector_store_cache"
+    CACHE_ROOT = os.environ.get(CACHE_ENV_VAR) or DEFAULT_CACHE_ROOT
 
     def __init__(
         self,
         *,
-        name: str,
+        key: str,
         provider: BaseProvider,
-        embeddings: Any,
+        embeddings: Embeddings,
         chunker: SmartChunker,
+        embed_spec: EmbedSpec # pragmatic addition for isomorphism
     ) -> None:
-        self.name = name
+        self.key = key
         self.provider = provider
-        self.embeddings = embeddings
+        self._embeddings = embeddings
         self.chunker = chunker
+        self._embed_spec: EmbedSpec = embed_spec
+        self._cache_dir = self._resolve_cache_dir()
 
         self._state: VectorStoreState = VectorStoreState.INITIALIZING
         self._active_index: FAISS | None = None
@@ -62,10 +79,10 @@ class VectorStore:
         self._daily_refresh_stop_event = threading.Event()
 
     @classmethod
-    def from_spec(cls, spec: "VectorStoreSpec") -> "VectorStore":
+    def from_spec(cls, spec: "VectorStoreSpec") -> "VectorStoreRuntime":
         logger.info(
             f"Creating VectorStore "
-            f"name={spec.name} "
+            f"key={spec.key} "
             f"embedder_type={spec.embedder.type} "
             f"embedder_args={spec.embedder.args}"
         )
@@ -74,16 +91,25 @@ class VectorStore:
         embeddings = cls._build_embeddings_from_spec(spec.embedder)
         chunker = SmartChunker.from_spec(spec.chunker)
 
-        print(
-            f"[{spec.name}] Created embeddings instance: "
+        logger.info(
+            f"[{spec.key}] Created embeddings instance: "
             f"{type(embeddings).__name__}"
         )
 
         return cls(
-            name=spec.name,
+            key=spec.key,
             provider=provider,
             embeddings=embeddings,
             chunker=chunker,
+            embed_spec=spec.embedder
+        )
+
+    def to_spec(self) -> VectorStoreSpec:
+        return VectorStoreSpec(
+            key=self.key,
+            provider=self.provider.to_spec(),
+            embedder=self._embed_spec,
+            chunker=self.chunker.to_spec()
         )
 
     @staticmethod
@@ -146,6 +172,10 @@ class VectorStore:
         raise ValueError(f"Unsupported embedder type: {embed_type}")
 
     @property
+    def embeddings(self) -> Embeddings: # to prevent edits
+        return self._embeddings
+
+    @property
     def state(self) -> VectorStoreState:
         with self._lock:
             return self._state
@@ -178,7 +208,7 @@ class VectorStore:
             index = self._active_index
 
         if index is None:
-            raise RuntimeError(f"VectorStore '{self.name}' is not ready")
+            raise RuntimeError(f"VectorStore '{self.key}' is not ready")
 
         return index
 
@@ -215,12 +245,20 @@ class VectorStore:
     def initialize(self) -> None:
         """
         Blocking initialization.
-        Safe to call multiple times; only the first successful call builds the index.
+        Safe to call multiple times; only the first successful call loads or builds
+        the index.
         """
         with self._lock:
             if self._active_index is not None:
                 return
             self._state = VectorStoreState.INITIALIZING
+
+        cached_index = self._load_cached_index()
+        if cached_index is not None:
+            with self._lock:
+                self._active_index = cached_index
+                self._state = VectorStoreState.READY
+            return
 
         self._rebuild_and_swap(failure_state=VectorStoreState.FAILED)
 
@@ -241,7 +279,7 @@ class VectorStore:
 
         thread = threading.Thread(
             target=self._refresh_thread_entrypoint,
-            name=f"{self.name}-refresh",
+            name=f"{self.key}-refresh",
             daemon=True,
         )
 
@@ -264,7 +302,7 @@ class VectorStore:
         with self._lock:
             if self._daily_refresh_thread and self._daily_refresh_thread.is_alive():
                 raise RuntimeError(
-                    f"VectorStore '{self.name}' daily refresh loop already running"
+                    f"VectorStore '{self.key}' daily refresh loop already running"
                 )
 
             self._daily_refresh_stop_event.clear()
@@ -272,7 +310,7 @@ class VectorStore:
             thread = threading.Thread(
                 target=self._daily_refresh_loop,
                 kwargs={"hour": hour, "minute": minute},
-                name=f"{self.name}-daily-refresh-loop",
+                name=f"{self.key}-daily-refresh-loop",
                 daemon=True,
             )
             self._daily_refresh_thread = thread
@@ -296,12 +334,12 @@ class VectorStore:
         with self._lock:
             if self._active_index is None:
                 raise RuntimeError(
-                    f"VectorStore '{self.name}' cannot refresh before initialization"
+                    f"VectorStore '{self.key}' cannot refresh before initialization"
                 )
 
             if self._refresh_thread and self._refresh_thread.is_alive():
                 raise RuntimeError(
-                    f"VectorStore '{self.name}' refresh already running"
+                    f"VectorStore '{self.key}' refresh already running"
                 )
 
             self._state = VectorStoreState.REFRESHING
@@ -310,7 +348,7 @@ class VectorStore:
         try:
             self._rebuild_and_swap(failure_state=VectorStoreState.READY)
         except Exception as exc:
-            print(f"[{self.name}] Background refresh failed: {exc}")
+            logger.info(f"[{self.key}] Background refresh failed: {exc}")
         finally:
             with self._lock:
                 self._refresh_thread = None
@@ -318,6 +356,7 @@ class VectorStore:
     def _rebuild_and_swap(self, *, failure_state: VectorStoreState) -> None:
         try:
             new_index = self._build_index_from_provider()
+            self._save_cached_index(new_index)
 
             with self._lock:
                 self._active_index = new_index
@@ -358,15 +397,86 @@ class VectorStore:
     def _build_faiss_index(self, docs: list[Document], ids: list[str]) -> FAISS:
         if not docs:
             raise ValueError(
-                f"VectorStore '{self.name}' could not build index: no documents found"
+                f"VectorStore '{self.key}' could not build index: no documents found"
             )
 
-        print(
-            f"[{self.name}] Building FAISS index with "
+        logger.info(
+            f"[{self.key}] Building FAISS index with "
             f"{type(self.embeddings).__name__}: {self.embeddings}"
         )
 
         return FAISS.from_documents(docs, self.embeddings, ids=ids)
+
+    def _resolve_cache_dir(self) -> Path:
+        return Path(self.CACHE_ROOT) / self.key
+
+    def _cache_manifest_path(self) -> Path:
+        return self._cache_dir / "manifest.json"
+
+    def _cache_fingerprint(self) -> str:
+        payload = {
+            "provider": self.provider.to_spec().model_dump(mode="json"),
+            "embedder": self._embed_spec.model_dump(mode="json"),
+            "chunker": self.chunker.to_spec().model_dump(mode="json"),
+        }
+        blob = json.dumps(payload, sort_keys=True).encode("utf-8")
+        return hashlib.sha256(blob).hexdigest()
+
+    def _cache_manifest(self) -> dict[str, Any]:
+        return {
+            "store": self.key,
+            "fingerprint": self._cache_fingerprint(),
+        }
+
+    def _load_cached_index(self) -> FAISS | None:
+        manifest_path = self._cache_manifest_path()
+        if not manifest_path.exists():
+            return None
+
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("[%s] Failed to read cache manifest: %s", self.key, exc)
+            return None
+
+        if manifest.get("fingerprint") != self._cache_fingerprint():
+            logger.info("[%s] Ignoring stale FAISS cache due to spec mismatch", self.key)
+            return None
+
+        try:
+            logger.info("[%s] Loading FAISS index from cache: %s", self.key, self._cache_dir)
+            return FAISS.load_local(
+                str(self._cache_dir),
+                self.embeddings,
+                allow_dangerous_deserialization=True,
+            )
+        except Exception as exc:
+            logger.warning("[%s] Failed to load FAISS cache: %s", self.key, exc)
+            return None
+
+    def _save_cached_index(self, index: FAISS) -> None:
+        temp_dir = self._cache_dir.parent / f"{self._cache_dir.name}.tmp"
+        try:
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            index.save_local(str(temp_dir))
+            self._cache_dir.parent.mkdir(parents=True, exist_ok=True)
+            (temp_dir / "manifest.json").write_text(
+                json.dumps(self._cache_manifest(), indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+            if self._cache_dir.exists():
+                shutil.rmtree(self._cache_dir)
+
+            temp_dir.replace(self._cache_dir)
+            logger.info("[%s] Saved FAISS cache to %s", self.key, self._cache_dir)
+        except Exception as exc:
+            logger.warning("[%s] Failed to persist FAISS cache: %s", self.key, exc)
+        finally:
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
 
     def _daily_refresh_loop(self, hour: int, minute: int) -> None:
         try:
@@ -376,23 +486,23 @@ class VectorStore:
                     minute=minute,
                 )
 
-                print(
-                    f"[{self.name}] Next scheduled refresh in "
+                logger.info(
+                    f"[{self.key}] Next scheduled refresh in "
                     f"{wait_seconds / 3600:.2f} hours"
                 )
 
                 if self._daily_refresh_stop_event.wait(timeout=wait_seconds):
                     break
 
-                print(f"[{self.name}] Running scheduled refresh...")
+                logger.info(f"[{self.key}] Running scheduled refresh...")
                 try:
                     self.refresh()
-                    print(f"[{self.name}] Scheduled refresh completed")
+                    logger.info(f"[{self.key}] Scheduled refresh completed")
                 except Exception as exc:
-                    print(f"[{self.name}] Scheduled refresh failed: {exc}")
+                    logger.info(f"[{self.key}] Scheduled refresh failed: {exc}")
 
         finally:
-            print(f"[{self.name}] Daily refresh loop stopped")
+            logger.info(f"[{self.key}] Daily refresh loop stopped")
             with self._lock:
                 self._daily_refresh_thread = None
 
@@ -443,7 +553,7 @@ if __name__ == "__main__":
         )
 
         spec = VectorStoreSpec(
-            name="test_store",
+            key="test_store",
             provider=simple_test,
             embedder=EmbedSpec(
                 type="ollama",
@@ -460,30 +570,30 @@ if __name__ == "__main__":
             ),
         )
 
-        store = VectorStore.from_spec(spec)
+        store = VectorStoreRuntime.from_spec(spec)
 
-        print("Initial state:", store.state)
-        print("Background refresh running:", store.is_background_refresh_running)
-        print("Daily refresh running:", store.is_daily_refresh_running)
+        logger.info("Initial state:", store.state)
+        logger.info("Background refresh running:", store.is_background_refresh_running)
+        logger.info("Daily refresh running:", store.is_daily_refresh_running)
 
         try:
             store.similarity_search("test")
         except RuntimeError as exc:
-            print("Expected failure before initialize:", exc)
+            logger.info("Expected failure before initialize:", exc)
 
         store.initialize()
 
-        print("State after initialize:", store.state)
-        print("Ready:", store.is_ready)
+        logger.info("State after initialize:", store.state)
+        logger.info("Ready:", store.is_ready)
 
         results = store.similarity_search(
             "Hva handler dokumentene om?",
             k=3,
         )
 
-        print("\nSimilarity search results:")
+        logger.info("\nSimilarity search results:")
         for result in results:
-            print("-", result.page_content[:100], "|", result.metadata)
+            logger.info("-", result.page_content[:100], "|", result.metadata)
 
         scored_results = store.similarity_search(
             "Hva handler dokumentene om?",
@@ -491,9 +601,9 @@ if __name__ == "__main__":
             with_score=True,
         )
 
-        print("\nSimilarity search results (with score):")
+        logger.info("\nSimilarity search results (with score):")
         for doc, score in scored_results:
-            print(f"- score={score:.4f} | {doc.page_content[:100]} | {doc.metadata}")
+            logger.info(f"- score={score:.4f} | {doc.page_content[:100]} | {doc.metadata}")
 
         mmr_results = store.max_marginal_relevance_search(
             "Hva handler dokumentene om?",
@@ -502,34 +612,34 @@ if __name__ == "__main__":
             lambda_mult=0.5,
         )
 
-        print("\nMMR search results:")
+        logger.info("\nMMR search results:")
         for result in mmr_results:
-            print("-", result.page_content[:100], "|", result.metadata)
+            logger.info("-", result.page_content[:100], "|", result.metadata)
 
-        print("\nStarting daily refresh loop...")
+        logger.info("\nStarting daily refresh loop...")
         store.start_daily_refresh_loop(hour=4, minute=30)
-        print("Daily refresh running:", store.is_daily_refresh_running)
+        logger.info("Daily refresh running:", store.is_daily_refresh_running)
 
-        print("\nRunning blocking refresh...")
+        logger.info("\nRunning blocking refresh...")
         store.refresh()
-        print("State after blocking refresh:", store.state)
+        logger.info("State after blocking refresh:", store.state)
 
-        print("\nRunning background refresh...")
+        logger.info("\nRunning background refresh...")
         refresh_thread = store.start_refresh()
 
-        print("State during background refresh:", store.state)
-        print("Background refresh running:", store.is_background_refresh_running)
+        logger.info("State during background refresh:", store.state)
+        logger.info("Background refresh running:", store.is_background_refresh_running)
 
         refresh_thread.join()
 
-        print("State after background refresh:", store.state)
-        print("Background refresh running:", store.is_background_refresh_running)
+        logger.info("State after background refresh:", store.state)
+        logger.info("Background refresh running:", store.is_background_refresh_running)
 
         try:
             time.sleep(5)
         finally:
-            print("\nStopping daily refresh loop...")
+            logger.info("\nStopping daily refresh loop...")
             store.stop_daily_refresh_loop(timeout=5)
-            print("Daily refresh running:", store.is_daily_refresh_running)
+            logger.info("Daily refresh running:", store.is_daily_refresh_running)
 
     main()

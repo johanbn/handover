@@ -8,10 +8,11 @@ import math
 from langchain_core.documents import Document
 
 from ruter_chatbot.types.iac.smart_chunker_spec import SmartChunkerSpec
+from ruter_chatbot.types.spec_based import SimpleSpecBased
 from ruter_chatbot.logger import get_logger
 
 logger = get_logger(__name__)
-class SmartChunker:
+class SmartChunker(SimpleSpecBased[SmartChunkerSpec]):
     '''
     Document and String chunker that splits semantically within boundaries.
         
@@ -29,6 +30,8 @@ class SmartChunker:
     On init, inadvisable configurations trigger warnings.
     Mathematically impossible configurations raise ValueErrors.
     '''
+    spec_class = SmartChunkerSpec
+
     def __init__(
         self,
         max_chunk_size=1000,
@@ -182,21 +185,6 @@ class SmartChunker:
                 )
         
         return split_docs
-    
-    @classmethod
-    def from_spec(cls, spec: SmartChunkerSpec) -> "SmartChunker":
-        max_chunk_size = spec.max_chunk_size
-        max_overlap = spec.max_overlap
-        semantic_min = spec.semantic_min
-        tolerance = spec.tolerance
-        separators = spec.separators
-        return cls(
-            max_chunk_size=max_chunk_size,
-            max_overlap=max_overlap,
-            semantic_min=semantic_min,
-            tolerance=tolerance,
-            separators=separators
-        )
 
     # Internals
 

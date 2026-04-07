@@ -11,6 +11,7 @@ from langchain_community.document_loaders.confluence import (
 )
 from langchain_core.documents import Document
 
+from ruter_chatbot.types.iac.provider_spec import ProviderSpec
 from ruter_chatbot.types.source import Source
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
 from ruter_chatbot.utility.secrets import secrets
@@ -24,7 +25,6 @@ class ConfluenceProvider(BaseProvider):
     Provider that reads content from a Confluence Cloud instance via REST API.
     Looks for authentication details in secrets and in environment
     """
-
     API_VERSION = "v2"
 
     def __init__(
@@ -65,6 +65,22 @@ class ConfluenceProvider(BaseProvider):
         self.min_length_doc = min_length_doc
 
         self._session = self._build_session()
+    
+    def to_spec(self) -> ProviderSpec:
+        return ProviderSpec(
+            type="confluence",
+            args={
+                "base_url": self.base_url.rstrip("/"),
+                "space_keys": self.space_keys or None,
+                "required_label": self.required_label or None,
+                "include_labels": self.include_labels,
+                "include_comments": self.include_comments,
+                "include_archived_content": self.include_archived_content,
+                "timeout": self.timeout,
+                "api_version": self.api_version,
+                "min_length_doc": self.min_length_doc
+            }
+        )
 
     # HTTP helpers
     

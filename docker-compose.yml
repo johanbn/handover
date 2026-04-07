@@ -7,6 +7,7 @@ services:
       - ./src:/app/src
       - ./notebooks:/app/notebooks
       - ./examples:/app/examples
+      - ./.local/vector_store_cache:/app/.local/vector_store_cache
       - ${OLLAMA_HOST_DIR}:/root/.ollama/models # define OLLAMA_HOST_DIR in .env
     # Ollama from host
     extra_hosts:
@@ -20,6 +21,7 @@ services:
       - OLLAMA_MODELS=/root/.ollama/models
       - OLLAMA_HOST=http://host.docker.internal:11434
       - AWS_REGION=${AWS_REGION} # define in .env
+      - VECTOR_STORE_CACHE_DIR=/app/.local/vector_store_cache
     secrets:
       - confluence_token
       - aws_access_key_id
@@ -29,11 +31,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+    volumes:
+      - ./.local/vector_store_cache:/app/.local/vector_store_cache
     env_file:
       - .env
     environment:
       - SECRET_DIR=/run/secrets
       - AWS_REGION=${AWS_REGION}
+      - VECTOR_STORE_CACHE_DIR=/app/.local/vector_store_cache
     secrets:
       - confluence_token
       - aws_access_key_id

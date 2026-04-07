@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from ruter_chatbot.graph.nodes.llm_node import LLMNode
 from ruter_chatbot.graph.nodes.retrieval_node import RetrievalNode
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry

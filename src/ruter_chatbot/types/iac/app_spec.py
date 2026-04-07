@@ -16,4 +16,7 @@ class OrchestratorSpec(BaseModel):
     pipelines: dict[str, PipelineSpec] = Field(default_factory=dict)
     prompts: dict[str, PromptSpec] = Field(default_factory=dict)
     vector_stores: dict[str, VectorStoreSpec] = Field(default_factory=dict)
-    graph: GraphSpec
+    graph: GraphSpec | None = Field(default=None)
+
+
+AppSpec = OrchestratorSpec

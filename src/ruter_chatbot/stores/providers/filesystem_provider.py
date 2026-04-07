@@ -2,16 +2,27 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Optional
+from typing import Iterator
 
 from langchain_core.documents import Document
 
 from ruter_chatbot.stores.providers.base_provider import BaseProvider
+from ruter_chatbot.types.iac.provider_spec import ProviderSpec
 from ruter_chatbot.types.source import Source
 
 
 @BaseProvider.register("filesystem")
 class FileSystemProvider(BaseProvider):
+
+    def to_spec(self) -> ProviderSpec:
+        return ProviderSpec(
+            type="filesystem",
+            args={
+                "path": self.spec["path"],
+                "glob": self.spec.get("glob", "*"),
+            }
+        )
+
     def _iter_sources(self) -> Iterator[Source]:
         root = Path(self.spec["path"])
         pattern = self.spec.get("glob", "*")

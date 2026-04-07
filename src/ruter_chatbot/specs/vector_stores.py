@@ -4,7 +4,7 @@ from ruter_chatbot.specs.embedders import EMBEDDERS
 from ruter_chatbot.specs.chunkers import default_chunker
 
 ruter_store: VectorStoreSpec = VectorStoreSpec(
-    name="ruter_store",
+    key="ruter_store",
     provider=ruterwiki_ks_extern,
     embedder=EMBEDDERS["nomic-embed-text"],
     chunker=default_chunker,
@@ -15,7 +15,7 @@ NOTE: locally hosted things do not work for production!
 '''
 
 ruter_store_aws = VectorStoreSpec(
-    name="ruter_store_aws",
+    key="ruter_store_aws",
     provider=ruterwiki_ks_intern,
     embedder=EMBEDDERS["cohere-bedrock-multilingual"],
     chunker=default_chunker,
