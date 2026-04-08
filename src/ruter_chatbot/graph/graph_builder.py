@@ -4,12 +4,18 @@ from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt.tool_node import tools_condition
 
-from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
-from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
 from ruter_chatbot.graph.node_builder import NodeBuilder
+from ruter_chatbot.graph.tools.tool_registry import ToolRegistry
+from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.specs.state import state_registry
-from ruter_chatbot.types.iac.edge_spec import RouterEdgeSpec, SimpleEdgeSpec
+from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
+from ruter_chatbot.types.iac.edge_spec import (
+    RouterEdgeSpec,
+    SimpleEdgeSpec,
+    ToolsConditionEdgeSpec,
+)
 from ruter_chatbot.types.iac.graph_spec import GraphSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 
@@ -17,14 +23,17 @@ from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 class GraphBuilder:
     def __init__(
         self,
+        *,
         pipelines: PipelineRegistry,
         vector_stores: VectorStoreRegistry,
-        prompts: dict[str, PromptSpec]
+        prompts: dict[str, PromptSpec],
+        tools: ToolRegistry,
     ) -> None:
         self.nodes = NodeBuilder(
             pipelines=pipelines,
             vector_stores=vector_stores,
-            prompts=prompts
+            prompts=prompts,
+            tools=tools,
         )
 
     def build(self, graph_spec: GraphSpec | dict[str, Any]):
@@ -54,6 +63,10 @@ class GraphBuilder:
 
             if isinstance(edge, RouterEdgeSpec):
                 self._add_router_edge(builder, edge, edge_targets)
+                continue
+
+            if isinstance(edge, ToolsConditionEdgeSpec):
+                self._add_tools_condition_edge(builder, edge, edge_targets)
                 continue
 
             raise TypeError(f"Unsupported edge type: {type(edge)!r}")
@@ -95,6 +108,23 @@ class GraphBuilder:
             return result
 
         builder.add_conditional_edges(edge.source, _route_with_default, path_map=path_map)
+
+    def _add_tools_condition_edge(
+        self,
+        builder,
+        edge: ToolsConditionEdgeSpec,
+        edge_targets: set[str],
+    ) -> None:
+        path_map = {
+            "tools": edge.tool_target,
+            "__end__": edge.no_tool_target or END,
+        }
+
+        edge_targets.add(edge.tool_target)
+        if edge.no_tool_target:
+            edge_targets.add(edge.no_tool_target)
+
+        builder.add_conditional_edges(edge.source, tools_condition, path_map=path_map)
 
     def _add_entry_edges(self, builder, graph_spec: GraphSpec, all_nodes: set[str], edge_targets: set[str]) -> None:
         entry_nodes = all_nodes - edge_targets

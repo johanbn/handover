@@ -1,7 +1,12 @@
 from pydantic import BaseModel, Field, model_validator
 
-from ruter_chatbot.types.iac.edge_spec import EdgeSpec, RouterEdgeSpec, SimpleEdgeSpec
-from ruter_chatbot.types.iac.node_spec import NodeSpec
+from ruter_chatbot.types.iac.edge_spec import (
+    EdgeSpec,
+    RouterEdgeSpec,
+    SimpleEdgeSpec,
+    ToolsConditionEdgeSpec,
+)
+from ruter_chatbot.types.iac.node_spec import LLMNodeSpec, NodeSpec, ToolNodeSpec
 
 
 class GraphCompileArgs(BaseModel):
@@ -19,6 +24,7 @@ class GraphSpec(BaseModel):
     @model_validator(mode="after")
     def validate_graph(self):
         node_names: set[str] = {n.name for n in self.nodes}
+        nodes_by_name = {n.name: n for n in self.nodes}
 
         if len(node_names) != len(self.nodes):
             raise ValueError("Duplicate node names detected.")
@@ -41,6 +47,27 @@ class GraphSpec(BaseModel):
                 if edge.default_target and edge.default_target not in node_names:
                     raise ValueError(
                         f"Detected edge with fallback to unknown node: '{edge.default_target}'"
+                    )
+
+            elif isinstance(edge, ToolsConditionEdgeSpec):
+                if edge.tool_target not in node_names:
+                    raise ValueError(
+                        f"Tools edge points to unknown tool node '{edge.tool_target}'."
+                    )
+
+                if not isinstance(nodes_by_name[edge.tool_target], ToolNodeSpec):
+                    raise ValueError(
+                        f"Tools edge target '{edge.tool_target}' must be a tool node."
+                    )
+
+                if not isinstance(nodes_by_name[edge.source], LLMNodeSpec):
+                    raise ValueError(
+                        f"Tools edge source '{edge.source}' must be an llm node."
+                    )
+
+                if edge.no_tool_target and edge.no_tool_target not in node_names:
+                    raise ValueError(
+                        f"Tools edge fallback points to unknown node '{edge.no_tool_target}'."
                     )
 
             else:

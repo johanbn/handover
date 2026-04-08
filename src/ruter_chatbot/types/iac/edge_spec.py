@@ -13,7 +13,14 @@ class RouterEdgeSpec(BaseEdgeSpec):
     default_target: str | None = None
     state_route_field: str = "route"
 
+
+class ToolsConditionEdgeSpec(BaseEdgeSpec):
+    tool_target: str
+    no_tool_target: str | None = None
+
+
 EdgeSpec = Union[
     SimpleEdgeSpec,
     RouterEdgeSpec,
+    ToolsConditionEdgeSpec,
 ]

@@ -12,6 +12,7 @@ class LLMNodeSpec(BaseNodeSpec):
     kind: Literal["llm"]
     pipeline_key: str
     prompt_key: str
+    tool_keys: list[str] = Field(default_factory=list)
     include_history: bool = True
     history_window: int = 5
     output_key: str = "answer"
@@ -31,10 +32,16 @@ class RetrieverNodeSpec(BaseNodeSpec):
     output_key: str = "docs"
 
 
+class ToolNodeSpec(BaseNodeSpec):
+    kind: Literal["tool"]
+    tool_keys: list[str] = Field(default_factory=list)
+
+
 NodeSpec = Annotated[
     Union[
         LLMNodeSpec,
         RetrieverNodeSpec,
+        ToolNodeSpec,
     ],
     Field(discriminator="kind"),
 ]

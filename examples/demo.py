@@ -6,8 +6,14 @@ from ruter_chatbot.types.iac.app_spec import OrchestratorSpec
 from ruter_chatbot.specs.prompts import PROMPTS
 from ruter_chatbot.specs.models import MODELS
 from ruter_chatbot.specs.pipelines import PIPELINES
+from ruter_chatbot.specs.tools import TOOLS
 from ruter_chatbot.specs.vector_stores import VECTOR_STORES
 from ruter_chatbot.specs.graphs import GRAPHS
+
+# Available graphs:
+# - "conditional_demo"
+# - "aws_demo"
+# - "ruter_tools_demo"
 
 
 def draw_graph_png(graph, file_path: str = "graph.png") -> None:
@@ -34,8 +40,9 @@ APP = OrchestratorSpec(
     models=MODELS,
     pipelines=PIPELINES,
     prompts=PROMPTS,
+    tools=TOOLS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPHS["aws_demo"],
+    graph=GRAPHS["ruter_tools_demo"],
 )
 
 
@@ -52,9 +59,6 @@ def main() -> None:
 
     print("Initializing vector stores...")
     orch.initialize("ruter_store_aws")
-
-    print("\nOrchestrator spec after vector store init:")
-    print(orch.to_spec().model_dump_json(indent=4))
     print("Ready.\n")
 
     conv_id = "1"

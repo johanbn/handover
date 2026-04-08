@@ -29,7 +29,7 @@ class VectorStoreRegistry(
         return self.get(key).start_refresh()
 
     def list_stores(self) -> VectorStoreListResponse:
-        stores: list[VectorStoreRuntime] = list(self._items.items())
+        stores: list[VectorStoreRuntime] = list(self._items.values())
         return VectorStoreListResponse(
             stores=[
                 VectorStoreInfo(

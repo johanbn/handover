@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from langgraph.graph import StateGraph
 
 from ruter_chatbot.graph.graph_builder import GraphBuilder
+from ruter_chatbot.graph.tools.tool_registry import ToolRegistry
 from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.specs.state import state_registry
@@ -21,9 +22,10 @@ from ruter_chatbot.types.app.vector_store import (
 from ruter_chatbot.types.iac.app_spec import OrchestratorSpec
 from ruter_chatbot.types.iac.graph_spec import GraphSpec
 from ruter_chatbot.types.iac.model_spec import ModelSpec
-from ruter_chatbot.types.iac.node_spec import LLMNodeSpec, RetrieverNodeSpec
+from ruter_chatbot.types.iac.node_spec import LLMNodeSpec, RetrieverNodeSpec, ToolNodeSpec
 from ruter_chatbot.types.iac.pipeline_spec import PipelineSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
+from ruter_chatbot.types.iac.tool_spec import ToolSpec
 from ruter_chatbot.types.iac.vector_store_spec import VectorStoreSpec
 from ruter_chatbot.types.spec_based import SpecBased
 from ruter_chatbot.utility.get_answer_from_state import get_answer_from_state
@@ -60,14 +62,16 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         *,
         models: dict[str, ModelSpec] | None = None,
         pipelines: dict[str, PipelineSpec] | None = None,
-        vector_stores: dict[str, VectorStoreSpec] | None,
         prompts: dict[str, PromptSpec] | None = None,
+        tools: dict[str, ToolSpec] | None = None,
+        vector_stores: dict[str, VectorStoreSpec] | None = None,
         graph_spec: GraphSpec | None,
     ) -> None:
         self.models: ModelRegistry = ModelRegistry.from_spec(models)
         self.pipelines: PipelineRegistry = PipelineRegistry.from_spec(pipelines, models=self.models)
         self.vector_stores: VectorStoreRegistry = VectorStoreRegistry.from_spec(vector_stores)
         self.prompts: dict[str, PromptSpec] = prompts or {}
+        self.tools: ToolRegistry = ToolRegistry.from_spec(tools, vector_stores=self.vector_stores)
         self.graph_spec: GraphSpec | None = graph_spec
 
         self._graph: StateGraph | None = None
@@ -79,6 +83,7 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         models = spec_obj.models
         pipelines = spec_obj.pipelines
         prompts = spec_obj.prompts
+        tools = spec_obj.tools
         vector_stores = spec_obj.vector_stores
 
         graph_spec = spec_obj.graph
@@ -87,6 +92,7 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
             models=models,
             pipelines=pipelines,
             prompts=prompts,
+            tools=tools,
             vector_stores=vector_stores,
             graph_spec=graph_spec,
         )
@@ -96,6 +102,7 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
             models=self.models.to_spec(),
             pipelines=self.pipelines.to_spec(),
             prompts={key: spec.model_copy(deep=True) for key, spec in self.prompts.items()},
+            tools=self.tools.to_spec(),
             vector_stores=self.vector_stores.to_spec(),
             graph=self.graph_spec,
         )
@@ -123,7 +130,8 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         graph_builder = GraphBuilder(
             pipelines=self.pipelines,
             vector_stores=self.vector_stores,
-            prompts=self.prompts
+            prompts=self.prompts,
+            tools=self.tools,
         )
         graph = graph_builder.build(graph_spec)
 
@@ -155,12 +163,16 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         used_models: set[str] = set()
         used_pipelines: set[str] = set()
         used_prompts: set[str] = set()
+        used_tools: set[str] = set()
         used_vector_stores: set[str] = set()
         
         for node in self.graph_spec.nodes:
             if isinstance(node, LLMNodeSpec):
                 used_pipelines.add(node.pipeline_key)
                 used_prompts.add(node.prompt_key)
+                used_tools.update(node.tool_keys)
+            elif isinstance(node, ToolNodeSpec):
+                used_tools.update(node.tool_keys)
             elif isinstance(node, RetrieverNodeSpec):
                 used_vector_stores.add(node.store_key)
         
@@ -170,7 +182,17 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
             used_models.add(
                 self.pipelines.get(pipeline_key).to_spec().model_key
             )
-        
+
+        missing_tools = [k for k in used_tools if k not in self.tools]
+        if missing_tools:
+            raise KeyError(f"Unknown tool(s): {', '.join(sorted(missing_tools))}")
+
+        for tool_key in used_tools:
+            tool_spec = self.tools.get(tool_key).to_spec()
+            store_key = tool_spec.args.get("store_key")
+            if isinstance(store_key, str) and store_key:
+                used_vector_stores.add(store_key)
+
         missing_prompts = [k for k in used_prompts if k not in self.prompts]
         if missing_prompts:
             raise KeyError(f"Unknown prompt(s): {', '.join(sorted(missing_prompts))}")
@@ -190,6 +212,7 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         self.models.keep_only(used_models)
         self.pipelines.keep_only(used_pipelines)
         self.vector_stores.keep_only(used_vector_stores)
+        self.tools.keep_only(used_tools)
         self.prompts = {k: self.prompts[k] for k in used_prompts} # dict
 
         self._graph = None # forces rebuild from graph_spec
