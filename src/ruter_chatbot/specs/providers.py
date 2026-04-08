@@ -9,7 +9,9 @@ ruterwiki_ks_intern = ProviderSpec(
     args={
         "base_url": "https://ruteras.atlassian.net",
         "space_keys": ["KS"],
-        "include_labels": True
+        "include_labels": True,
+        "required_label": "cb-intern",
+        "required_label_id": "597393410",
     }
 )
 '''
@@ -22,7 +24,8 @@ ruterwiki_ks_extern = ProviderSpec(
         "base_url": "https://ruteras.atlassian.net",
         "space_keys": ["KS"],
         "include_labels": True,
-        "required_label": "cb-ekstern"
+        "required_label": "cb-ekstern",
+        "required_label_id": "596770823",
     }
 )
 '''

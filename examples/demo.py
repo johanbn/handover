@@ -42,7 +42,7 @@ APP = OrchestratorSpec(
     prompts=PROMPTS,
     tools=TOOLS,
     vector_stores=VECTOR_STORES,
-    graph=GRAPHS["ruter_tools_demo"],
+    graph=GRAPHS["aws_demo"],
 )
 
 
@@ -53,12 +53,15 @@ def main() -> None:
     orch = Orchestrator.from_spec(app)
 
     graph = orch.build_graph()
-    print(orch.to_spec().model_dump_json(indent=4))
+    #print(orch.to_spec().model_dump_json(indent=4))
 
     draw_graph_png(graph, "graph.png")
 
     print("Initializing vector stores...")
-    orch.initialize("ruter_store_aws")
+    orch.initialize("ruter_store_aws_extern", "ruter_store_aws_intern")
+
+    print("\nUsed spec after vector store init:")
+    #print(orch.to_used_spec().model_dump_json(indent=4))
     print("Ready.\n")
 
     conv_id = "1"

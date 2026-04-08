@@ -13,12 +13,12 @@ demo = GraphSpec(
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
-            r.retriever_ruter_aws,
+            r.retriever_ruter_aws_extern,
             g.llm_qwen_medium_answer,
         ],
         edges=[
             SimpleEdgeSpec(
-                source=r.retriever_ruter_aws.name,
+                source=r.retriever_ruter_aws_extern.name,
                 target=g.llm_qwen_medium_answer.name,
             )
         ],
@@ -30,7 +30,7 @@ conditional_demo = GraphSpec(
         compile_args=GraphCompileArgs(use_memory=True),
         nodes=[
             g.llm_claude_route_choice,
-            r.retriever_ruter_aws_big,
+            r.retriever_ruter_aws_extern_big,
             g.llm_claude_rag_answer,
         ],
         edges=[
@@ -38,13 +38,13 @@ conditional_demo = GraphSpec(
                 source=g.llm_claude_route_choice.name,
                 state_route_field="route",
                 routes={
-                    "search": r.retriever_ruter_aws_big.name,
+                    "search": r.retriever_ruter_aws_extern_big.name,
                     "chat": g.llm_claude_rag_answer.name,
                 },
                 default_target=g.llm_claude_rag_answer.name,
             ),
             SimpleEdgeSpec(
-                source=r.retriever_ruter_aws_big.name,
+                source=r.retriever_ruter_aws_extern_big.name,
                 target=g.llm_claude_rag_answer.name,
             ),
         ],
@@ -55,12 +55,12 @@ aws_demo = GraphSpec(
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
-            r.retriever_ruter_aws,
+            r.retriever_ruter_aws_intern,
             g.llm_claude_rag_no_history_answer,
         ],
         edges=[
             SimpleEdgeSpec(
-                source=r.retriever_ruter_aws.name,
+                source=r.retriever_ruter_aws_intern.name,
                 target=g.llm_claude_rag_no_history_answer.name,
             ),
         ],

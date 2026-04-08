@@ -1,4 +1,4 @@
-'''Intended to be main access point '''
+﻿'''Intended to be main access point '''
 from fastapi import FastAPI
 
 from ruter_chatbot.orchestrator import Orchestrator
@@ -18,7 +18,7 @@ app = FastAPI()
 # security middleware, etc.
 
 orch = Orchestrator.from_spec(APP)
-# orch.initialize("ruter_store_aws")
+# orch.initialize("ruter_store_aws_extern")
 
 
 @app.get("/")
@@ -59,6 +59,7 @@ async def confluence_test():
 @app.get("/app-spec", response_model=AppSpec)
 def get_app_spec() -> AppSpec:
     return orch.spec
+
 
 @app.get("/vector-stores", response_model=VectorStoreListResponse)
 def list_vector_stores() -> VectorStoreListResponse:

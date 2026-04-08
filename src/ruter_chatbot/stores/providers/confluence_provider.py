@@ -33,6 +33,7 @@ class ConfluenceProvider(BaseProvider):
         base_url: str,                              # https://yourcompany.atlassian.net
         space_keys: Optional[list[str]] = None,     # Limit to these spaces (recommended)
         required_label: Optional[str] = None,       # Limit to this tag
+        required_label_id: Optional[str] = None,    # Preferred if known; avoids global label scan
         include_labels: bool = False,
         include_comments: bool = False,
         include_archived_content: bool = False,
@@ -57,6 +58,7 @@ class ConfluenceProvider(BaseProvider):
         
         self.space_keys = space_keys or []
         self.required_label = required_label or ""
+        self.required_label_id = required_label_id or ""
 
         self.include_labels = include_labels
         self.include_comments = include_comments
@@ -130,11 +132,32 @@ class ConfluenceProvider(BaseProvider):
         return data
 
     def _resolve_label_id(self) -> str:
+        if hasattr(self, "_label_id"):
+            return self._label_id
+
+        if self.required_label_id:
+            if self.required_label:
+                data = self._paginated_request("GET", "labels")
+                expected_label = self.required_label.strip()
+                matching_label = next(
+                    (
+                        label for label in data.get("results", [])
+                        if (label.get("name") or "").strip() == expected_label
+                    ),
+                    None,
+                )
+                actual_id = (matching_label or {}).get("id", "")
+                if actual_id != self.required_label_id:
+                    raise ValueError(
+                        "required_label and required_label_id do not refer to the same "
+                        f"Confluence label: expected id {self.required_label_id!r} "
+                        f"for label {expected_label!r}, got {actual_id!r}"
+                    )
+            self._label_id = self.required_label_id
+            return self._label_id
+
         if not self.required_label:
             self._label_id = ""
-            return self._label_id
-        
-        if hasattr(self, "_label_id"):
             return self._label_id
         
         data = self._paginated_request(

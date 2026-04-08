@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Sequence
 
 from ruter_chatbot.types.iac.provider_spec import ProviderSpecLike
 from ruter_chatbot.types.iac.embed_spec import EmbedSpec
