@@ -13,17 +13,17 @@ demo = GraphSpec(
         state_key="structured_rag",
         compile_args=GraphCompileArgs(use_memory=False),
         nodes=[
-            r.retriever_ruter_aws_extern,
+            r.retriever_ruter_local,
             g.llm_qwen_medium_answer,
         ],
         edges=[
             SimpleEdgeSpec(
-                source=r.retriever_ruter_aws_extern.name,
+                source=r.retriever_ruter_local.name,
                 target=g.llm_qwen_medium_answer.name,
             )
         ],
     )
-''' Different demo setup'''
+'''Demo using local systems - only for dev use.'''
 
 conditional_demo = GraphSpec(
         state_key="structured_rag",

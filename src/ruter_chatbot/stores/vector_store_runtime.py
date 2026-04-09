@@ -151,7 +151,10 @@ class VectorStoreRuntime(SpecBased[VectorStoreSpec], Keyed):
                 ) from None
 
             model_id = embed_args.pop("model_id", None)
-            region_name = embed_args.pop("region_name", "eu-west-1")
+            region_name = embed_args.pop(
+                "region_name",
+                os.environ.get('AWS_REGION')
+            )
 
             if not model_id:
                 raise ValueError(

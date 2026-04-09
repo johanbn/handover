@@ -41,7 +41,7 @@ AWS-hosted internal VectorStore for Ruter built from multiple providers.
 '''
 
 VECTOR_STORES = {
-    "ruter_store": ruter_store,
+    #"ruter_store": ruter_store,
     "ruter_store_aws_extern": ruter_store_aws_extern,
     "ruter_store_aws_intern": ruter_store_aws_intern,
 }

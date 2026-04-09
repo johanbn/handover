@@ -48,7 +48,7 @@ class Secrets:
         dir_path = cls._get_secrets_dir()
         raise KeyError(
             f"Secret '{name}' (looked for '{lower_name}') not found in  {dir_path}. "
-            f"Available: {', '.join(cls._loaded_keys()) or 'none'}"
+            f"Available: {', '.join(cls._loaded.keys()) or 'none'}"
         )
     
     @classmethod
