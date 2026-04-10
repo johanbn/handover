@@ -14,18 +14,24 @@ from ruter_chatbot.types.source import Source
 @BaseProvider.register("filesystem")
 class FileSystemProvider(BaseProvider):
 
+    def __init__(self, path: str, glob: str = "*", encode: str = "utf-8"):
+        self.path = path
+        self.glob = glob
+        self.encode = encode
+
     def to_spec(self) -> ProviderSpec:
         return ProviderSpec(
             type="filesystem",
             args={
-                "path": self.spec["path"],
-                "glob": self.spec.get("glob", "*"),
+                "path": self.path,
+                "glob": self.glob,
+                "encode": self.encode
             }
         )
 
     def _iter_sources(self) -> Iterator[Source]:
-        root = Path(self.spec["path"])
-        pattern = self.spec.get("glob", "*")
+        root = Path(self.path)
+        pattern = self.glob
 
         for p in root.glob(pattern):
             if p.is_file():
@@ -41,7 +47,7 @@ class FileSystemProvider(BaseProvider):
 
     def _iter_docs_from_source(self, source: Source) -> Iterator[Document]:
         path = Path(source.location)
-        encoding = self.spec.get("encoding", "utf-8")
+        encoding = self.encoding
         text = path.read_text(encoding=encoding)
 
         blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]

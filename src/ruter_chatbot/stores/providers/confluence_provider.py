@@ -40,10 +40,7 @@ class ConfluenceProvider(BaseProvider):
         api_version: str = API_VERSION,
         timeout: float = 30.0,
         min_length_doc = 1,
-        **spec: Any
     ):
-        super().__init__(**spec)
-
         self.base_url = base_url.rstrip("/") + "/"
         self.api_version = api_version
         self.timeout = timeout

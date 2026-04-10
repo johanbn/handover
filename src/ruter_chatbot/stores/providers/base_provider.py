@@ -24,9 +24,6 @@ class BaseProvider(SpecBased[ProviderSpec], ABC):
     PLUGIN_PACKAGE = "ruter_chatbot.stores.providers"
     spec_class = ProviderSpec
 
-    def __init__(self, **spec: Any):
-        self.spec = spec
-
     @classmethod
     def register(cls, key: str):
         def deco(subcls: Type["BaseProvider"]):
@@ -96,7 +93,7 @@ class BaseProvider(SpecBased[ProviderSpec], ABC):
 
     @property
     def provider_id(self) -> str:
-        spec_json = json.dumps(self.spec, sort_keys=True, default=str)
+        spec_json = json.dumps(self.to_spec(), sort_keys=True, default=str)
         spec_hash = hashlib.sha1(spec_json.encode("utf-8")).hexdigest()[:12]
         return f"{self.provider_type}:{spec_hash}"
 

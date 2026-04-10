@@ -86,7 +86,7 @@ def main() -> None:
     print("Provider id:", provider.provider_id)
     print("Provider class:", type(provider))
     print("Provider spec:")
-    print(json.dumps(provider.spec, indent=2, ensure_ascii=False, default=str))
+    print(json.dumps(provider.to_spec(), indent=2, ensure_ascii=False, default=str))
 
     sources = provider.list_sources()
     print(f"\nFound {len(sources)} source(s)\n")

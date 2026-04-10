@@ -19,9 +19,7 @@ class CompositeProvider(BaseProvider):
     """
 
     def __init__(self, **spec: Any):
-        super().__init__(**spec)
-
-        provider_specs = self.spec.get("providers", [])
+        provider_specs = spec.get("providers", [])
         if not isinstance(provider_specs, list):
             raise TypeError("'providers' must be a list")
 
