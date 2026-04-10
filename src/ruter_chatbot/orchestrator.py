@@ -282,6 +282,16 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         for key in store_keys:
             self.vector_stores.initialize(key)
 
+    def clear_vector_store_cache(self, *store_keys: str) -> None:
+        if not store_keys:
+            store_keys = tuple(self.vector_stores.keys())
+
+        missing = [key for key in store_keys if key not in self.vector_stores]
+        if missing:
+            raise KeyError(f"Unknown vector store(s): {', '.join(missing)}")
+
+        for key in store_keys:
+            self.vector_stores.get(key).clear_cache()
     def ask(
         self,
         question: str,
