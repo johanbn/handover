@@ -17,7 +17,8 @@ from ruter_chatbot.types.iac.app_spec import AppSpec
 app = FastAPI()
 # security middleware, etc.
 
-orch = Orchestrator.from_spec(APP).simplify().initialize()
+orch = Orchestrator.from_spec(APP.pruned_to_graph())
+orch.initialize()
 
 
 @app.get("/")
@@ -36,7 +37,7 @@ Besøk samme addressen /docs for mer informasjon om hvordan du kan bruke dette A
 # subdirectories so we can import them here for use.
 @app.get("/app-spec", response_model=AppSpec)
 def get_app_spec() -> AppSpec:
-    return orch.spec
+    return orch.to_spec()
 
 
 @app.get("/vector-stores", response_model=VectorStoreListResponse)

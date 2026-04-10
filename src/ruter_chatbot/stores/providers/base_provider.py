@@ -93,7 +93,11 @@ class BaseProvider(SpecBased[ProviderSpec], ABC):
 
     @property
     def provider_id(self) -> str:
-        spec_json = json.dumps(self.to_spec(), sort_keys=True, default=str)
+        spec_json = json.dumps(
+            self.to_spec().model_dump(mode="json"),
+            sort_keys=True,
+            default=str,
+        )
         spec_hash = hashlib.sha1(spec_json.encode("utf-8")).hexdigest()[:12]
         return f"{self.provider_type}:{spec_hash}"
 

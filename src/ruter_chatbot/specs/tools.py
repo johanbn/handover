@@ -28,7 +28,7 @@ ruter_search_docs = ToolSpec(
     key="search_ruter_docs",
     type="builtin",
     args={
-        "store_key": "ruter_store_aws",
+        "store_key": "ruter_store_aws_intern",
         "search_type": "mmr",
         "top_k": 5,
         "fetch_k": 20,

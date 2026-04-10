@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ruter_chatbot.stores.providers.base_provider import BaseProvider
 from ruter_chatbot.specs.providers import ruterwiki_ks_extern, ruterwiki_ks_intern
+from ruter_chatbot.stores.providers.base_provider import BaseProvider
 
 """
-Base abstractions for content providers.
+Demo script for provider specs and provider runtime loading.
 
 A provider is responsible for:
 1. listing available sources from some backend,
@@ -15,19 +15,12 @@ A provider is responsible for:
 
 Providers are registered by type string via @BaseProvider.register(...),
 and instantiated dynamically through BaseProvider.from_spec(...).
-
-Typical usage:
-    provider = BaseProvider.from_spec(spec)
-    sources = provider.list_sources()
-
-    for source in sources:
-        docs = provider.get_docs_from_source(source)
-        ...
 """
 
 
 def main() -> None:
-    data_dir = (Path(__file__).resolve().parent / "data").resolve()
+    repo_root = Path(__file__).resolve().parents[1]
+    data_dir = repo_root / "src" / "ruter_chatbot" / "stores" / "providers" / "data"
 
     try_spec = 3
 
@@ -51,7 +44,7 @@ def main() -> None:
                             "glob": "*.md",
                         },
                     },
-                    ruterwiki_ks_extern
+                    ruterwiki_ks_extern,
                 ]
             },
         }
@@ -73,7 +66,7 @@ def main() -> None:
                     "glob": "*.md",
                 },
             },
-            ruterwiki_ks_extern
+            ruterwiki_ks_extern,
         ]
 
     elif try_spec == 3:
