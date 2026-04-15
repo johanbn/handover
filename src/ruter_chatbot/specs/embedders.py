@@ -16,11 +16,3 @@ bedrock_cohere_multilingual = EmbedSpec(
     },
 )
 '''Bedrock-hosted cohere.embed-multilingual-v3 from eu-west-1'''
-
-EMBEDDERS = {
-    #"nomic-embed-text": ollama_nomic,
-    "cohere-bedrock-multilingual": bedrock_cohere_multilingual,
-}
-'''
-Registry of embedders that are in active use.
-'''

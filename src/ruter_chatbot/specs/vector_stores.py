@@ -1,15 +1,16 @@
+import ruter_chatbot.specs.embedders as emb
+
 from ruter_chatbot.types.iac.vector_store_spec import VectorStoreSpec
 from ruter_chatbot.specs.providers import (
     ruterwiki_ks_extern,
     ruterwiki_ks_intern,
 )
-from ruter_chatbot.specs.embedders import EMBEDDERS
 from ruter_chatbot.specs.chunkers import default_chunker
 
 ruter_store: VectorStoreSpec = VectorStoreSpec(
     key="ruter_store",
     provider=ruterwiki_ks_extern,
-    embedder=EMBEDDERS["nomic-embed-text"],
+    embedder=emb.ollama_nomic,
     chunker=default_chunker,
 )
 '''
@@ -20,7 +21,7 @@ NOTE: locally hosted things do not work for production!
 ruter_store_aws_extern = VectorStoreSpec(
     key="ruter_store_aws_extern",
     provider=ruterwiki_ks_extern,
-    embedder=EMBEDDERS["cohere-bedrock-multilingual"],
+    embedder=emb.bedrock_cohere_multilingual,
     chunker=default_chunker,
 )
 '''
@@ -33,7 +34,7 @@ ruter_store_aws_intern = VectorStoreSpec(
         ruterwiki_ks_extern,
         ruterwiki_ks_intern,
     ],
-    embedder=EMBEDDERS["cohere-bedrock-multilingual"],
+    embedder=emb.bedrock_cohere_multilingual,
     chunker=default_chunker,
 )
 '''

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Type
@@ -7,6 +8,7 @@ from typing import Any, ClassVar, Type
 from ruter_chatbot.types.iac.model_spec import ModelSpec
 from ruter_chatbot.types.keyed import Keyed
 from ruter_chatbot.types.spec_based import SpecBased
+from ruter_chatbot.utility.secrets import secrets
 
 
 class ModelRuntime(SpecBased[ModelSpec], Keyed, ABC):
@@ -110,6 +112,8 @@ class BedrockModelRuntime(ModelRuntime):
 
         if not model_id:
             raise ValueError("ModelSpec.args must include 'model' for bedrock_model")
+
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = secrets.get_or_raise('aws_bedrock_token')
 
         client = boto3.client("bedrock-runtime", region_name=region_name)
         return ChatBedrockConverse(client=client, **merged_args)
