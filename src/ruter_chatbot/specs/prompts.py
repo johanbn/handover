@@ -4,11 +4,18 @@ from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 
 naive = PromptSpec(
     key="naive",
-    template="""Question: {question}
-
-Context: {context}
-
-Answer:"""
+    message_templates=[
+        {
+            "role": "user",
+            "content": "{question}",
+            "kind": "question"
+        },
+        {
+            "role": "system",
+            "content": "Context: {context}",
+            "kind": "context"
+        },
+    ]
 )
 '''
 A prompt that does the bare minimum.
@@ -16,20 +23,32 @@ A prompt that does the bare minimum.
 
 concise = PromptSpec(
     key="concise",
-    template="""
-Answer the question concisely using the provided context.
-
-Question: {question}
-
-Context: {context}
-
-Answer:"""
+    message_templates=[
+        {
+            "role": "system",
+            "content": "Answer the question concisely using the provided context.",
+            "kind": "instruction",
+        },
+        {
+            "role": "user",
+            "content": "{question}",
+            "kind": "question"
+        },
+        {
+            "role": "system",
+            "content": "Context: {context}",
+            "kind": "context",
+        },
+    ]
 )
 '''`naive` + instruction to be concise based on context.'''
 
 first_person_informative_chatbot_norwegian = PromptSpec(
     key="norwegian_chat",
-    template="""
+    message_templates=[
+        {
+            "role": "system",
+            "content": """
 Jeg er en chatbot, og bør levere svar i et chat-vennlig format.
 Det betyr korte svar i en hyggelig tone som gir den informasjonen som trengs, og ikke mer.
 Mange brukere kommer til å se meg som en representat for kollektivtrafikkselskapet Ruter.
@@ -39,12 +58,20 @@ Jeg stoler på at det som ligger i kontekst stemmer, og på det brukere sier om 
 Av respekt for brukere unngår jeg å dele informasjon som ikke kommer fra kontekst eller fra dem.
 Hvis informasjonen kommer fra bruker bør jeg unngå alt som antyder at informasjonen kommer fra meg.
 Brukere vet ikke om kontekst, men setter gjerne pris på at jeg forteller dem hvor informasjonen min kommer fra.
-
-Spørsmål: {question}
-
-Kontekst: {context}
-
-Svar:"""
+""",
+            "kind": "instruction",
+        },
+        {
+            "role": "user",
+            "content": "Spørsmål: {question}",
+            "kind": "question"
+        },
+        {
+            "role": "system",
+            "content": "Kontekst: {context}",
+            "kind": "context",
+        },
+    ]
 )
 '''
 Norwegian-language prompt with informative descriptions
@@ -53,7 +80,10 @@ delivered conventionally and logically, but in first-person.
 
 search_or_chat_route_norwegian = PromptSpec(
     key="search_or_chat_route_norwegian",
-    template="""\
+    message_templates=[
+        {
+            "role": "system",
+            "content": """
 Du er en rutingsklassifiserer for en Ruter-chatbot.
 
 Oppgave:
@@ -68,11 +98,20 @@ search
 chat
 - Ikke skriv noe annet.
 - Hvis du er i tvil, svar search.
-
-Spørsmål:
-{question}
-
-Svar:""",
+""",
+            "kind": "instruction",
+        },
+        {
+            "role": "user",
+            "content": "Spørsmål: {question}",
+            "kind": "question"
+        },
+        {
+            "role": "system",
+            "content": "Kontekst: {context}",
+            "kind": "context",
+        },
+    ]
 )
 '''
 Norwegian-language prompt for route-selection between chat and search.
@@ -80,7 +119,10 @@ Norwegian-language prompt for route-selection between chat and search.
 
 brief_rag_norwegian = PromptSpec(
     key="brief_rag_norwegian",
-    template="""\
+    message_templates=[
+        {
+            "role": "system",
+            "content": """
 Du er en hjelpsom og presis kundeserviceassistent for Ruter.
 
 Regler:
@@ -89,14 +131,20 @@ Regler:
 - Hvis konteksten ikke inneholder nok informasjon, si det tydelig.
 - Ikke finn på detaljer som ikke støttes av konteksten.
 - Svar på samme språk som brukeren.
-
-Spørsmål:
-{question}
-
-Kontekst:
-{context}
-
-Svar:""",
+""",
+            "kind": "instruction",
+        },
+        {
+            "role": "user",
+            "content": "Spørsmål: {question}",
+            "kind": "question"
+        },
+        {
+            "role": "system",
+            "content": "Kontekst: {context}",
+            "kind": "context",
+        },
+    ]
 )
 '''
 Norwegian-language prompt with brief rules.
@@ -104,7 +152,10 @@ Norwegian-language prompt with brief rules.
 
 ruter_tool_chat_norwegian = PromptSpec(
     key="ruter_tool_chat_norwegian",
-    template="""\
+    message_templates=[
+        {
+            "role": "system",
+            "content": """
 Du er en hjelpsom og presis kundeserviceassistent for Ruter.
 
 Du har tilgang til fem verktøy:
@@ -153,14 +204,20 @@ Regler:
 - Ikke finn på avganger, stop IDs eller reisealternativer.
 - Ikke påstå at en bestemt linje kan brukes med mindre det faktisk støttes av tool-resultatet.
 - Ikke påstå at en linje går via et stopp uten at `lookup_ruter_line` faktisk viser det.
-
-Spørsmål:
-{question}
-
-Kontekst:
-{context}
-
-Svar:""",
+""",
+            "kind": "instruction",
+        },
+        {
+            "role": "user",
+            "content": "Spørsmål: {question}",
+            "kind": "question"
+        },
+        {
+            "role": "system",
+            "content": "Kontekst: {context}",
+            "kind": "context",
+        },
+    ]
 )
 '''
 Norwegian-language prompt for Ruter realtime, docs, and journey-planning tool use.
@@ -168,7 +225,10 @@ Norwegian-language prompt for Ruter realtime, docs, and journey-planning tool us
 
 past_answer_aware_rag_norwegian = PromptSpec(
     key="past_answer_aware_rag_norwegian",
-    template="""\
+    message_templates=[
+        {
+            "role": "system",
+            "content": """
 Du er en hjelpsom og presis kundeserviceassistent for Ruter.
 
 Du får tre felter:
@@ -191,17 +251,25 @@ Regler:
 - Hvis answer ikke er tomt, forbedre eller korriger det ved hjelp av context.
 - Hvis route er tomt eller irrelevant, ignorer det.
 - Svar på samme språk som brukeren.
-
-Spørsmål:
-{question}
-
-Kontekst:
-{context}
-
-Tidligere svarutkast:
-{answer}
-
-Endelig svar:""",
+""",
+            "kind": "instruction",
+        },
+        {
+            "role": "user",
+            "content": "Spørsmål: {question}",
+            "kind": "question"
+        },
+        {
+            "role": "system",
+            "content": "Kontekst: {context}",
+            "kind": "context",
+        },
+        {
+            "role": "system",
+            "content": "Tidligere svarutkast: {answer}",
+            "kind": "example",
+        }
+    ]
 )
 '''
 Norwegian-language prompt that with detailed descriptions of what

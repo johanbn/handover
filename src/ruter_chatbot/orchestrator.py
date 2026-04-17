@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 from pydantic import BaseModel
+from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph
 
 from ruter_chatbot.graph.graph_builder import GraphBuilder
@@ -292,6 +293,7 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
 
         for key in store_keys:
             self.vector_stores.get(key).clear_cache()
+
     def ask(
         self,
         question: str,
@@ -299,10 +301,18 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         debug: bool = False,
     ) -> AskResponse:
         graph = self.graph
-        use_memory = self.graph_spec.compile_args.use_memory
+        use_memory = self.graph_spec.policy.use_memory
         resolved_conversation_id = conversation_id or str(uuid4()) if use_memory else None
 
-        input_state = {"question": question}
+        turn_id = uuid4()
+        input_state = {
+            "turn_id": turn_id,
+            "question": question,
+            "messages": [HumanMessage(
+                content=question,
+                additional_kwargs= {"turn_id": turn_id}
+            )]
+        }
         config = None
 
         if resolved_conversation_id:

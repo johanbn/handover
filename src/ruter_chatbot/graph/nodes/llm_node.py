@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 from typing import Any
-
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage
 
 from ruter_chatbot.graph.nodes.base import BaseNode
+from ruter_chatbot.graph.policy import GraphPolicy
+from ruter_chatbot.graph.policies.input import apply_history_window_to_messages
+from ruter_chatbot.graph.policies.output import sanitize_messages_for_output
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
 from ruter_chatbot.logger import get_logger
 from ruter_chatbot.types.iac.node_spec import LLMNodeSpec
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
 from ruter_chatbot.types.iac.state_spec import RagState
 from ruter_chatbot.utility.build_context import build_context
+from ruter_chatbot.utility.with_turn_id import with_turn_id
 
 logger = get_logger(__name__)
-PROMPT_WRAPPER_KEY = "ruter_chatbot_prompt_wrapper"
-
 
 class LLMNode(BaseNode):
     def __init__(
@@ -22,14 +23,13 @@ class LLMNode(BaseNode):
         *,
         pipelines: PipelineRegistry,
         prompts: dict[str, PromptSpec],
+        policy: GraphPolicy,
         name: str,
         pipeline_key: str,
         prompt_key: str,
         tool_keys: list[str] | None = None,
         tools: list[Any] | None = None,
         output_key: str = "answer",
-        include_history: bool = True,
-        history_window: int = 5,
     ) -> None:
         self.pipelines = pipelines
         self.prompts = prompts
@@ -39,14 +39,14 @@ class LLMNode(BaseNode):
         self.tool_keys = tool_keys or []
         self.tools = tools or []
         self.output_key = output_key
-        self.include_history = include_history
-        self.history_window = history_window
+        self.policy = policy
 
     @classmethod
     def from_spec(
         cls,
         spec: LLMNodeSpec,
         pipelines: PipelineRegistry,
+        policy: GraphPolicy,
         prompts: dict[str, PromptSpec],
         tools_registry: Any | None = None,
     ) -> "LLMNode":
@@ -68,8 +68,7 @@ class LLMNode(BaseNode):
             tool_keys=list(spec.tool_keys),
             tools=tools,
             output_key=spec.output_key,
-            include_history=spec.include_history,
-            history_window=spec.history_window,
+            policy=policy
         )
 
     def to_spec(self) -> LLMNodeSpec:
@@ -79,18 +78,17 @@ class LLMNode(BaseNode):
             pipeline_key=self.pipeline_key,
             prompt_key=self.prompt_key,
             tool_keys=list(self.tool_keys),
-            output_key=self.output_key,
-            include_history=self.include_history,
-            history_window=self.history_window,
+            output_key=self.output_key
         )
 
     def __call__(self, state: RagState) -> dict[str, Any]:
+        turn_id = state.turn_id
         llm = self.pipelines.build(self.pipeline_key)
+
         if self.tools:
             llm = llm.bind_tools(self.tools)
-        prompt = self.prompts.get(self.prompt_key)
-        if prompt is None:
-            raise KeyError(f"Unknown prompt key: {self.prompt_key}")
+
+        prompt = self.prompts[self.prompt_key]
 
         context = build_context(state.docs)
 
@@ -99,55 +97,30 @@ class LLMNode(BaseNode):
             "context": context,
             "answer": state.answer,
         }
-        rendered_prompt = prompt.template.format(**prompt_vars)
 
-        full_history = state.messages if self.include_history else []
-        history_tail_type = (
-            getattr(full_history[-1], "type", None) if full_history else None
-        )
+        rendered_prompt = prompt.render_messages(turn_id=turn_id, **prompt_vars)
 
-        if history_tail_type == "tool":
-            # During a tool loop we must preserve the prompt wrapper that initiated
-            # the tool call so the model can continue the same exchange coherently.
-            filtered_history = list(full_history)
-        else:
-            filtered_history = [
-                msg
-                for msg in full_history
-                if not getattr(msg, "additional_kwargs", {}).get(PROMPT_WRAPPER_KEY)
-            ]
+        raw_history = state.messages or []
 
-        history = (
-            filtered_history[-self.history_window:]
-            if self.include_history
-            else []
-        )
-        if history and getattr(history[0], "type", None) == "tool":
-            # Bedrock tool conversations must keep the preceding tool-use message
-            # together with the tool result; a blind history window can split them.
-            history = list(filtered_history)
-
-        llm_messages = list(history)
-        history_tail_type = getattr(history[-1], "type", None) if history else None
-        should_append_prompt = history_tail_type != "tool"
-        current_human = HumanMessage(
-            content=rendered_prompt,
-            additional_kwargs={PROMPT_WRAPPER_KEY: True},
-        )
-        if should_append_prompt:
-            llm_messages.append(current_human)
-
+        history = apply_history_window_to_messages(raw_history, self.policy)
+        llm_messages = history + rendered_prompt
         logger.debug("Invoking LLM with %d messages", len(llm_messages))
 
-        resp = llm.invoke(llm_messages)
-        content = getattr(resp, "content", "")
-        answer_text = "" if content is None else str(content)
-        emitted_messages = [resp]
-        if should_append_prompt:
-            emitted_messages.insert(0, current_human)
+        resp: AIMessage = with_turn_id(
+            llm.invoke(llm_messages),
+            turn_id=turn_id
+        )
+
+        answer_text = str(resp.text)
+
+        emitted_messages = rendered_prompt + [resp]
+        filtered_output = sanitize_messages_for_output(
+            emitted_messages,
+            policy=self.policy
+        )
 
         return {
             "context": context,
             self.output_key: answer_text,
-            "messages": emitted_messages,
+            "messages": filtered_output,
         }

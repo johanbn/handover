@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ruter_chatbot.specs.state import AskState
 
@@ -10,6 +10,20 @@ class AskResponse(BaseModel):
 
 
 class AskRequest(BaseModel):
-    question: str
-    conversation_id: str | None = None
-    debug: bool = False
+    question: str = Field(
+        description="A question for the RAG-LLM chatbot.",
+        examples=["What is love?"]
+    )
+    conversation_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional ID of an existing conversation to continue with memory. "
+            "Omit the field entirely or send null to start a new conversation."
+        ),
+        examples=[None, "conv-abc123-uuid-here"],
+    )
+    debug: bool = Field(
+        default=False,
+        description="If true, include the full internal graph state in the response (for debugging only).",
+        examples=[False, True],
+    )

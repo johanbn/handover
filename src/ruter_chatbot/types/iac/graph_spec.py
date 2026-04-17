@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, model_validator
 
+from ruter_chatbot.graph.policy import GraphPolicy
 from ruter_chatbot.types.iac.edge_spec import (
     EdgeSpec,
     RouterEdgeSpec,
@@ -8,18 +9,13 @@ from ruter_chatbot.types.iac.edge_spec import (
 )
 from ruter_chatbot.types.iac.node_spec import LLMNodeSpec, NodeSpec, ToolNodeSpec
 
-
-class GraphCompileArgs(BaseModel):
-    use_memory: bool = True
-
-
 class GraphSpec(BaseModel):
     state_key: str
     """Key to state registry in specs"""
 
     nodes: list[NodeSpec]
     edges: list[EdgeSpec]
-    compile_args: GraphCompileArgs = Field(default_factory=GraphCompileArgs)
+    policy: GraphPolicy = Field(default_factory=GraphPolicy)
 
     @model_validator(mode="after")
     def validate_graph(self):

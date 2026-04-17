@@ -2,7 +2,7 @@ import ruter_chatbot.specs.nodes.generators as g
 import ruter_chatbot.specs.nodes.retrievers as r
 import ruter_chatbot.specs.nodes.tools as t
 
-from ruter_chatbot.types.iac.graph_spec import GraphSpec, GraphCompileArgs
+from ruter_chatbot.types.iac.graph_spec import GraphSpec, GraphPolicy
 from ruter_chatbot.types.iac.edge_spec import (
     SimpleEdgeSpec,
     RouterEdgeSpec,
@@ -11,7 +11,7 @@ from ruter_chatbot.types.iac.edge_spec import (
 
 demo = GraphSpec( 
         state_key="structured_rag",
-        compile_args=GraphCompileArgs(use_memory=False),
+        policy=GraphPolicy(history_window=0),
         nodes=[
             r.retriever_ruter_local,
             g.llm_qwen_medium_answer,
@@ -27,7 +27,6 @@ demo = GraphSpec(
 
 conditional_demo = GraphSpec(
         state_key="structured_rag",
-        compile_args=GraphCompileArgs(use_memory=True),
         nodes=[
             g.llm_claude_route_choice,
             r.retriever_ruter_aws_extern_big,
@@ -53,7 +52,6 @@ conditional_demo = GraphSpec(
     
 aws_demo = GraphSpec(
         state_key="structured_rag",
-        compile_args=GraphCompileArgs(use_memory=True),
         nodes=[
             r.retriever_ruter_aws_intern,
             g.llm_claude_rag_no_history_answer,
@@ -69,7 +67,6 @@ aws_demo = GraphSpec(
 
 ruter_tools_demo = GraphSpec(
         state_key="structured_rag",
-        compile_args=GraphCompileArgs(use_memory=True),
         nodes=[
             g.llm_claude_ruter_tool_chat,
             t.ruter_tools,

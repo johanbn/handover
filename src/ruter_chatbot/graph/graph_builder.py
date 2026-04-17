@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt.tool_node import tools_condition
 
@@ -47,7 +46,13 @@ class GraphBuilder:
         builder = StateGraph(state_type)
 
         for node_spec in graph_spec.nodes:
-            builder.add_node(node_spec.name, self.nodes.from_spec(node_spec))
+            builder.add_node(
+                node_spec.name,
+                self.nodes.from_spec(
+                    node_spec,
+                    graph_spec.policy
+                )
+            )
 
         edge_sources: set[str] = set()
         edge_targets: set[str] = set()
@@ -74,9 +79,7 @@ class GraphBuilder:
         self._add_entry_edges(builder, graph_spec, all_nodes, edge_targets)
         self._add_leaf_edges(builder, all_nodes, edge_sources)
 
-        compile_kwargs: dict[str, Any] = {}
-        if graph_spec.compile_args.use_memory:
-            compile_kwargs["checkpointer"] = MemorySaver()
+        compile_kwargs = graph_spec.policy.get_compile_kwargs()
 
         return builder.compile(**compile_kwargs)
 
