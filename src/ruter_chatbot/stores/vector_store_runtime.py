@@ -8,8 +8,6 @@ from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any
-
-import boto3
 from tqdm import tqdm
 
 from langchain_core.documents import Document
@@ -24,7 +22,7 @@ from ruter_chatbot.types.iac.vector_store_spec import VectorStoreSpec
 from ruter_chatbot.types.keyed import Keyed
 from ruter_chatbot.types.source import Source
 from ruter_chatbot.types.spec_based import SpecBased
-from ruter_chatbot.utility.secrets import secrets
+from ruter_chatbot.utility.aws import bedrock_runtime
 
 logger = get_logger(__name__)
 
@@ -153,12 +151,7 @@ class VectorStoreRuntime(SpecBased[VectorStoreSpec], Keyed):
                     "EmbedSpec.args must include 'model_id' for bedrock"
                 )
 
-            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = secrets.get_or_raise('aws_bedrock_token')
-
-            client = boto3.client(
-                service_name="bedrock-runtime",
-                region_name=region_name,
-            )
+            client = bedrock_runtime(region_name)
 
             return BedrockEmbeddings(
                 client=client,
