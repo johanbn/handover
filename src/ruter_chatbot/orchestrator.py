@@ -10,6 +10,7 @@ from ruter_chatbot.graph.graph_builder import GraphBuilder
 from ruter_chatbot.graph.tools.tool_registry import ToolRegistry
 from ruter_chatbot.llm.model_registry import ModelRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
+from ruter_chatbot.logger import get_logger
 from ruter_chatbot.specs.state import state_registry
 from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
 from ruter_chatbot.types.app.ask import AskResponse
@@ -31,6 +32,7 @@ from ruter_chatbot.types.iac.vector_store_spec import VectorStoreSpec
 from ruter_chatbot.types.spec_based import SpecBased
 from ruter_chatbot.utility.get_answer_from_state import get_answer_from_state
 
+logger = get_logger(__name__)
 
 class Orchestrator(SpecBased[OrchestratorSpec]):
     '''
@@ -222,6 +224,50 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
 
     def list_vector_stores(self) -> VectorStoreListResponse:
         return self.vector_stores.list_stores()
+    
+    def start_daily_vector_store_refreshes(
+        self,
+        start_hour: int,
+        start_minute: int,
+        stagger_by: dict[str, int] = { "hours": 0, "minutes": 30 }
+    ) -> dict[str, str]:
+        """
+        Convenience method to start daily refresh loops for all vector stores.
+        Delegates to the vector store registry.
+
+        Does not expect the list of stores to change after starting.
+
+        Args:
+            start_hour (int): The hour (0-23) that the first refresh should start.
+            start_minute (int): The minute (0-59) that the first refresh should start.
+            stagger_by (dict[str, int]):
+                How many `hours` and `minutes` should be between one refresh start and the next.
+                Additional fields will be ignored. Missing fields are treated as 0.
+                Both values must be non-negative integers.
+
+                NOTE: Excessive staggering can cause unexpected behavior.
+                Keep the cumulative stagger within a 24-hour cycle.
+        
+        Returns:
+            dict[str, str]:
+                Mapping of store key → scheduled time ("HH:MM") or error message if scheduling failed.
+        """
+        logger.debug(
+            "Activating daily vector store refreshes: start=%02d:%02d, stagger=%s",
+            start_hour, start_minute, stagger_by
+        )
+        result = self.vector_stores.start_daily_refreshes(
+            start_hour=start_hour,
+            start_minute=start_minute,
+            stagger_by=stagger_by
+        )
+        
+        logger.info(
+            "Daily vector store refreshes scheduled:\n%s",
+            "\n".join(f"  {k}: {v}" for k, v in sorted(result.items()))
+        )
+
+        return result
 
     def search_vector_store_similarity(
         self,
