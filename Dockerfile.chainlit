@@ -1,0 +1,37 @@
+# Builder image
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm AS builder
+
+WORKDIR /app
+
+# Copy dependency metadata
+COPY pyproject.toml .python-version uv.lock ./
+
+# Put the virtualenv somewhere not covered by the bind mount
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+
+# Install deps at build time into /opt/venv
+RUN uv sync --frozen --group prod --group chainlit --no-install-project
+
+# Copy the full source
+COPY src ./src
+COPY .chainlit ./.chainlit
+
+# Install project
+RUN uv sync --group prod --group chainlit --frozen
+
+# Runtime image
+FROM python:3.12-slim-bookworm AS runtime
+
+WORKDIR /app
+
+# Copy venv from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PORT=8001
+
+COPY src ./src
+COPY .chainlit ./.chainlit
+
+EXPOSE 8001
+
+CMD ["sh", "-c", "chainlit run src/ruter_chatbot/chainlit_app.py --host 0.0.0.0 --port ${PORT}"]
