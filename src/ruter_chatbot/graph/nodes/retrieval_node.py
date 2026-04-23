@@ -68,7 +68,11 @@ class RetrievalNode(BaseNode):
             output_key=self.output_key,
         )
 
-    def __call__(self, state: RagState) -> dict[str, list[Document]]:
+    def __call__(
+        self,
+        state: RagState,
+    ) -> dict[str, list[Document]]:
+        search_query = state.query or state.question
         turn_id = state.turn_id
         old_docs = state.docs or []
         new_docs = []
@@ -77,14 +81,14 @@ class RetrievalNode(BaseNode):
 
         if "similarity" in self.search_type:
             results = store.similarity_search(
-                state.question,
+                search_query,
                 k=self.top_k,
                 with_score=self.search_type == "scored_similarity",
             )
 
         elif self.search_type == "mmr":
             results = store.max_marginal_relevance_search(
-                state.question,
+                search_query,
                 k=self.top_k,
                 fetch_k=self.fetch_k,
                 lambda_mult=self.lambda_mult,
@@ -118,5 +122,6 @@ class RetrievalNode(BaseNode):
             self.output_key: apply_history_window_to_docs(
                 list(docs.values()),
                 policy=self.policy
-            )
+            ),
+            "query": None # reset to favor user questions.
         }

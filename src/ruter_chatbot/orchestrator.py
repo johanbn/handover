@@ -74,7 +74,7 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         self.pipelines: PipelineRegistry = PipelineRegistry.from_spec(pipelines, models=self.models)
         self.vector_stores: VectorStoreRegistry = VectorStoreRegistry.from_spec(vector_stores)
         self.prompts: dict[str, PromptSpec] = prompts or {}
-        self.tools: ToolRegistry = ToolRegistry.from_spec(tools, vector_stores=self.vector_stores)
+        self.tools: ToolRegistry = ToolRegistry.from_spec(tools)
         self.graph_spec: GraphSpec | None = graph_spec
 
         self._graph: StateGraph | None = None
@@ -379,5 +379,6 @@ class Orchestrator(SpecBased[OrchestratorSpec]):
         return AskResponse(
             answer=get_answer_from_state(result),
             conversation_id=resolved_conversation_id if use_memory else None,
+            docs=getattr(result, 'docs', []),
             state=result if debug else None,
         )

@@ -24,16 +24,10 @@ ruter_lookup_line = ToolSpec(
     args={"client_name": "mycompany-ruter-demo"},
 )
 
-ruter_search_docs = ToolSpec(
-    key="search_ruter_docs",
+request_docs = ToolSpec(
+    key="request_docs",
     type="builtin",
-    args={
-        "store_key": "ruter_store_aws_intern",
-        "search_type": "mmr",
-        "top_k": 5,
-        "fetch_k": 20,
-        "lambda_mult": 0.5,
-    },
+    args={},
 )
 
 
@@ -42,5 +36,5 @@ TOOLS: dict[str, ToolSpec] = {
     "get_ruter_departures": ruter_get_departures,
     "plan_ruter_journey": ruter_plan_journey,
     "lookup_ruter_line": ruter_lookup_line,
-    "search_ruter_docs": ruter_search_docs,
+    "request_docs": request_docs,
 }

@@ -70,7 +70,7 @@ llm_claude_ruter_tool_chat: NodeSpec = LLMNodeSpec(
     kind="llm",
     pipeline_key="claude_bedrock_rag",
     prompt_key="ruter_tool_chat_norwegian",
-    tool_keys=["search_ruter_stops", "get_ruter_departures", "plan_ruter_journey", "lookup_ruter_line", "search_ruter_docs"],
+    tool_keys=["search_ruter_stops", "get_ruter_departures", "plan_ruter_journey", "lookup_ruter_line", "request_docs"],
     output_key="answer",
 )
 '''

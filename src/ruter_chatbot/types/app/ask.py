@@ -1,11 +1,14 @@
 from pydantic import BaseModel, Field
 
+from langchain_core.documents import Document
+
 from ruter_chatbot.specs.state import AskState
 
 
 class AskResponse(BaseModel):
     answer: str
     conversation_id: str | None = None
+    docs: list[Document] = []
     state: AskState | None = None
 
 

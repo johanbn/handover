@@ -4,6 +4,7 @@ from langgraph.prebuilt import ToolNode
 
 from ruter_chatbot.graph.nodes.llm_node import LLMNode
 from ruter_chatbot.graph.nodes.retrieval_node import RetrievalNode
+from ruter_chatbot.graph.nodes.update_node import UpdateNode
 from ruter_chatbot.graph.policy import GraphPolicy
 from ruter_chatbot.graph.tools.tool_registry import ToolRegistry
 from ruter_chatbot.graph.tools.tool_wrapper import tool_wrapper
@@ -13,6 +14,7 @@ from ruter_chatbot.types.iac.node_spec import (
     LLMNodeSpec,
     ToolNodeSpec,
     RetrieverNodeSpec,
+    UpdateNodeSpec,
     NodeSpec,
 )
 from ruter_chatbot.types.iac.prompt_spec import PromptSpec
@@ -52,6 +54,8 @@ class NodeBuilder:
                 tools=self.tools.get_many(spec.tool_keys),
                 wrap_tool_call=tool_wrapper
             )
+        elif isinstance(spec, UpdateNodeSpec):
+            return UpdateNode.from_spec(spec=spec)
         else:
             raise TypeError(f"Unsupported node spec type: {type(spec).__name__}")
 

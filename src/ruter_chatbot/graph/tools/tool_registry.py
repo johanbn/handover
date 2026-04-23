@@ -4,7 +4,6 @@ from typing import Any
 from typing import Iterable
 
 from ruter_chatbot.graph.tools.tool_runtime import ToolRuntime
-from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
 from ruter_chatbot.types.iac.tool_spec import ToolSpec
 from ruter_chatbot.types.spec_based_registry import SpecBasedRegistry
 
@@ -18,28 +17,22 @@ class ToolRegistry(
 
     def __init__(
         self,
-        vector_stores: VectorStoreRegistry,
         items: Iterable[ToolRuntime | ToolSpec] | None = None,
     ) -> None:
-        self.vector_stores = vector_stores
         super().__init__(items)
 
     @classmethod
     def from_spec(
         cls,
         specs: dict[str, ToolSpec] | None,
-        vector_stores: VectorStoreRegistry,
     ) -> "ToolRegistry":
-        return super().from_spec(specs, vector_stores=vector_stores)
+        return super().from_spec(specs)
 
     def add(self, obj: ToolRuntime | ToolSpec) -> ToolRuntime:
         if isinstance(obj, ToolRuntime):
             runtime = obj
         else:
-            runtime = ToolRuntime.from_spec_with_dependencies(
-                obj,
-                vector_stores=self.vector_stores,
-            )
+            runtime = ToolRuntime.from_spec(obj)
         self._items[runtime.key] = runtime
         return runtime
 

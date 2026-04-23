@@ -120,7 +120,6 @@ class LLMNode(BaseNode):
         )
 
         return {
-            "context": context,
             self.output_key: answer_text,
             "messages": filtered_output,
         }

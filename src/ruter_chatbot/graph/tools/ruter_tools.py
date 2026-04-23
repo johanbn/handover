@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict
+from typing import Annotated
 
-from langchain_core.tools import tool
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import tool, InjectedToolCallId
+from langgraph.types import Command
 
-from ruter_chatbot.stores.vector_store_registry import VectorStoreRegistry
 from ruter_chatbot.utility.ruter_entur_api import EnturRealtimeClient
 
 
@@ -158,60 +160,27 @@ def build_lookup_ruter_line_tool(client_name: str | None = None):
     return lookup_ruter_line
 
 
-def build_search_ruter_docs_tool(
-    vector_stores: VectorStoreRegistry,
-    *,
-    store_key: str | None = None,
-    search_type: str = "mmr",
-    top_k: int | None = None,
-    fetch_k: int | None = None,
-    lambda_mult: float | None = None,
-):
-    if store_key is None:
-        store_keys = list(vector_stores.keys())
-        if len(store_keys) == 1:
-            store_key = store_keys[0]
-        else:
-            raise ValueError(
-                "search_ruter_docs requires an explicit store_key when multiple vector stores are available."
-            )
+def build_request_docs_tool():
 
     @tool
-    def search_ruter_docs(query: str) -> dict:
+    def  request_docs(query: str, tool_call_id: Annotated[str, InjectedToolCallId]) -> dict:
         """
-        Search Ruter documentation and return the most relevant passages.
+        Requests additional documentation by routing to standard retrieval with requested query.
+        NOTE: This tool is single-use per turn. One call retrieves up to several (k) documents, where (k) is not hardcoded.
         Use this for fares, ticketing, rules, products, customer service, and other knowledge questions.
         """
 
-        store = vector_stores.get(store_key)
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content=f"Routing to retrieval with query: {query}",
+                        tool_call_id=tool_call_id
+                    )
+                ],
+                "route": "retrieval",
+                "query": query,
+            }
+        )
 
-        if search_type == "mmr":
-            mmr_kwargs: dict[str, float | int] = {}
-            if top_k is not None:
-                mmr_kwargs["k"] = top_k
-            if fetch_k is not None:
-                mmr_kwargs["fetch_k"] = fetch_k
-            if lambda_mult is not None:
-                mmr_kwargs["lambda_mult"] = lambda_mult
-            docs = store.max_marginal_relevance_search(query, **mmr_kwargs)
-        elif search_type == "similarity":
-            similarity_kwargs: dict[str, int | bool] = {"with_score": False}
-            if top_k is not None:
-                similarity_kwargs["k"] = top_k
-            docs = store.similarity_search(query, **similarity_kwargs)
-        else:
-            raise ValueError(f"Unsupported search_type for search_ruter_docs: {search_type}")
-
-        return {
-            "store_key": store_key,
-            "query": query,
-            "hits": [
-                {
-                    "page_content": doc.page_content,
-                    "metadata": dict(doc.metadata),
-                }
-                for doc in docs
-            ],
-        }
-
-    return search_ruter_docs
+    return request_docs

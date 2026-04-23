@@ -5,6 +5,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt.tool_node import tools_condition
 
+from ruter_chatbot.graph.nodes.update_node import UpdateNode
 from ruter_chatbot.graph.node_builder import NodeBuilder
 from ruter_chatbot.graph.tools.tool_registry import ToolRegistry
 from ruter_chatbot.llm.pipeline_registry import PipelineRegistry
@@ -83,20 +84,40 @@ class GraphBuilder:
 
         return builder.compile(**compile_kwargs)
 
-    def _add_router_edge(self, builder, edge: RouterEdgeSpec, edge_targets: set[str]) -> None:
-        path_map = dict(edge.routes)
+    def _add_router_edge(self, builder: StateGraph, edge: RouterEdgeSpec, edge_targets: set[str]) -> None:
+        original_path_map = dict(edge.routes)
+        
         if edge.default_target:
-            path_map["__default__"] = edge.default_target
-
+            original_path_map["__default__"] = edge.default_target
+        
         edge_targets.update(edge.routes.values())
         if edge.default_target:
             edge_targets.add(edge.default_target)
+
+        rewritten_path_map: dict[str, str] = {}
+        for route_key, target in original_path_map.items():
+            update_node_name = (
+                f"{edge.source}__clear_{edge.state_route_field}__to__{target}"
+            )
+
+            if update_node_name not in builder.nodes:
+                builder.add_node(
+                    update_node_name,
+                    UpdateNode(
+                        name=update_node_name,
+                        updates={edge.state_route_field: None},
+                    )
+                )
+
+                builder.add_edge(update_node_name, target)
+            
+            rewritten_path_map[route_key] = update_node_name
 
         def _route_with_default(
             state: Any,
             *,
             _route_field=edge.state_route_field,
-            _path_map=path_map,
+            _path_map=rewritten_path_map,
             _default=edge.default_target,
         ) -> str | None:
             if isinstance(state, dict):
@@ -109,12 +130,16 @@ class GraphBuilder:
             if _default:
                 return "__default__"
             return result
-
-        builder.add_conditional_edges(edge.source, _route_with_default, path_map=path_map)
+        
+        builder.add_conditional_edges(
+            edge.source,
+            _route_with_default,
+            path_map=rewritten_path_map
+        )
 
     def _add_tools_condition_edge(
         self,
-        builder,
+        builder: StateGraph,
         edge: ToolsConditionEdgeSpec,
         edge_targets: set[str],
     ) -> None:
@@ -129,7 +154,7 @@ class GraphBuilder:
 
         builder.add_conditional_edges(edge.source, tools_condition, path_map=path_map)
 
-    def _add_entry_edges(self, builder, graph_spec: GraphSpec, all_nodes: set[str], edge_targets: set[str]) -> None:
+    def _add_entry_edges(self, builder: StateGraph, graph_spec: GraphSpec, all_nodes: set[str], edge_targets: set[str]) -> None:
         entry_nodes = all_nodes - edge_targets
         if not entry_nodes and graph_spec.nodes:
             entry_nodes = {graph_spec.nodes[0].name}
@@ -137,7 +162,7 @@ class GraphBuilder:
         for entry in entry_nodes:
             builder.add_edge(START, entry)
 
-    def _add_leaf_edges(self, builder, all_nodes: set[str], edge_sources: set[str]) -> None:
+    def _add_leaf_edges(self, builder: StateGraph, all_nodes: set[str], edge_sources: set[str]) -> None:
         leaf_nodes = all_nodes - edge_sources
         for leaf in leaf_nodes:
             builder.add_edge(leaf, END)

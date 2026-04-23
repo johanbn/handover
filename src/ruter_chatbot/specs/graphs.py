@@ -68,17 +68,26 @@ aws_demo = GraphSpec(
 ruter_tools_demo = GraphSpec(
         state_key="structured_rag",
         nodes=[
+            r.retriever_ruter_aws_intern,
             g.llm_claude_ruter_tool_chat,
             t.ruter_tools,
         ],
         edges=[
+            SimpleEdgeSpec(
+                source=r.retriever_ruter_aws_intern.name,
+                target=g.llm_claude_ruter_tool_chat.name,
+            ),
             ToolsConditionEdgeSpec(
                 source=g.llm_claude_ruter_tool_chat.name,
                 tool_target=t.ruter_tools.name,
             ),
-            SimpleEdgeSpec(
+            RouterEdgeSpec(
                 source=t.ruter_tools.name,
-                target=g.llm_claude_ruter_tool_chat.name,
+                state_route_field="route",
+                routes={
+                    "retrieval": r.retriever_ruter_aws_intern.name
+                },
+                default_target=g.llm_claude_ruter_tool_chat.name,
             ),
         ],
     )

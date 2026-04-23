@@ -2,7 +2,7 @@ from typing import Callable
 from uuid import UUID
 
 from langchain_core.messages import ToolMessage
-from langgraph.prebuilt.tool_node import ToolCallRequest, ToolCallWrapper
+from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from ruter_chatbot.utility.with_turn_id import with_turn_id
