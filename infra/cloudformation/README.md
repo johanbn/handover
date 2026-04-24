@@ -38,9 +38,39 @@ Det viktigste her er:
 
 - `GitHubRepository`
 
-## Manual bootstrap commands
+## Anbefalt: bootstrap via GitHub Actions
 
-Dette er hovedsporet for oppstart av et nytt miljø.
+Dette er anbefalt oppstartsspor for teamet som får repoet overlevert.
+
+Flyten er:
+
+1. Fyll ut `infra/cloudformation/runtime.parameters.handoff.json`
+2. Endre `infra/cloudformation/network.parameters.handoff.json` bare hvis dere vil bruke andre nettverks-CIDR-er enn default
+3. Legg inn disse repo-secretsene i GitHub:
+   - `AWS_BOOTSTRAP_ACCESS_KEY_ID`
+   - `AWS_BOOTSTRAP_SECRET_ACCESS_KEY`
+   - `AWS_BOOTSTRAP_SESSION_TOKEN` hvis dere bruker midlertidige credentials
+4. Gå til GitHub-repoet
+5. Åpne `Actions`
+6. Velg [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml)
+7. Klikk `Run workflow`
+8. Velg branch
+9. Start workflowen i GitHub UI
+
+Når workflowen kjører, gjør den dette:
+
+1. Oppretter nettverket fra `network.yaml`
+2. Oppretter runtime foundation fra `runtime.yaml`
+3. Bygger og pusher første API- og Chainlit-image til ECR
+4. Aktiverer ECS services, ALB, blue/green og autoscaling
+5. Oppretter CI/CD-oppsettet fra `cicd.yaml`
+6. Setter repo-variablene `AWS_REGION` og `AWS_ROLE_TO_ASSUME`
+
+Etter dette bruker vanlige deploy-workflows OIDC, ikke bootstrap-secrets.
+
+## Alternativ: manuell bootstrap lokalt
+
+Dette er fallback-sporet hvis dere heller vil kjøre oppsettet fra egen maskin.
 
 ### 1. Klon repoet
 
@@ -271,18 +301,6 @@ Ellers kan disse settes i GitHub UI:
 
 - `AWS_REGION=eu-west-1`
 - `AWS_ROLE_TO_ASSUME=<DeployRoleArn>`
-
-## Bootstrap via GitHub Actions
-
-Hvis dere heller vil kjøre init fra GitHub Actions, kan dere bruke [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml).
-
-Da må disse repo-secretsene være satt:
-
-- `AWS_BOOTSTRAP_ACCESS_KEY_ID`
-- `AWS_BOOTSTRAP_SECRET_ACCESS_KEY`
-- `AWS_BOOTSTRAP_SESSION_TOKEN`
-
-Vanlige deploy-workflows bruker fortsatt OIDC etterpå.
 
 ## Etter bootstrap
 

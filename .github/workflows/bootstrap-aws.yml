@@ -191,7 +191,14 @@ jobs:
               --stack-name "${RUNTIME_STACK_NAME}"
           fi
 
-      - name: Read image URIs from runtime parameter file
+      - name: Read AWS account id
+        id: aws_account
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image URIs
         id: image_uris
         shell: bash
         run: |
@@ -206,12 +213,20 @@ jobs:
               data = json.load(fh)
 
           values = {item["ParameterKey"]: item["ParameterValue"] for item in data}
-          api_image_uri = values.get("ApiImageUri", "")
-          chainlit_image_uri = values.get("ChainlitImageUri", "")
-          if not api_image_uri or not chainlit_image_uri:
-              raise SystemExit(f"Missing ApiImageUri or ChainlitImageUri in {path}")
+          account_id = os.environ["AWS_ACCOUNT_ID"]
+          region = os.environ["AWS_REGION"]
+          ecr_registry = f"{account_id}.dkr.ecr.{region}.amazonaws.com"
 
-          ecr_registry = api_image_uri.split("/", 1)[0]
+          api_image_uri = values.get("ApiImageUri", "").strip()
+          if not api_image_uri:
+              api_tag = values.get("ApiImageTag", "prod-latest").strip() or "prod-latest"
+              api_image_uri = f"{ecr_registry}/ruter-chatbot:{api_tag}"
+
+          chainlit_image_uri = values.get("ChainlitImageUri", "").strip()
+          if not chainlit_image_uri:
+              chainlit_tag = values.get("ChainlitImageTag", "prod-latest").strip() or "prod-latest"
+              chainlit_image_uri = f"{ecr_registry}/ruter-chainlit:{chainlit_tag}"
+
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
               out.write(f"api_image_uri={api_image_uri}\n")
               out.write(f"chainlit_image_uri={chainlit_image_uri}\n")
@@ -219,6 +234,7 @@ jobs:
           PY
         env:
           RUNTIME_PARAMETER_FILE: ${{ steps.runtime_param_files.outputs.full }}
+          AWS_ACCOUNT_ID: ${{ steps.aws_account.outputs.account_id }}
 
       - name: Login to ECR
         shell: bash
