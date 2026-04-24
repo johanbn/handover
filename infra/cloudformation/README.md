@@ -2,36 +2,33 @@
 
 Denne mappen er laget for teamet som får repoet overlevert og skal sette opp miljøet i egen AWS-konto.
 
-## Dette får dere
+## Filer
 
 - [network.yaml](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/network.yaml)
-  - oppretter VPC, internet gateway, route table og to public subnets
 - [runtime.yaml](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/runtime.yaml)
-  - oppretter ECR, ECS cluster, ALB, security groups, target groups, task definitions, ECS services og autoscaling
 - [cicd.yaml](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/cicd.yaml)
-  - oppretter GitHub OIDC provider og deploy-rolle for GitHub Actions
-- [bootstrap-aws.yml](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/bootstrap-aws.yml)
-  - setter opp alt i riktig rekkefølge
-
-## Filer dere skal bruke
-
 - [network.parameters.handoff.json](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/network.parameters.handoff.json)
 - [runtime.parameters.handoff.json](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/runtime.parameters.handoff.json)
 - [cicd.parameters.handoff.json](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/cicd.parameters.handoff.json)
+- [bootstrap-aws.yml](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/bootstrap-aws.yml)
 
-`*.example.json` er bare referanser. For overlevering bruker dere `*.handoff.json`.
+`*.handoff.json` er filene som skal brukes ved overlevering. `*.example.json` er bare referanser.
 
-## Før dere starter
+## To måter å bootstrappe miljøet på
 
-Hovedantakelsen i denne guiden er at dere kjører bootstrap manuelt fra egen maskin med vanlig AWS-auth, for eksempel via:
+### Alternativ A: Lokalt fra egen maskin
+
+Dette er hovedsporet hvis dere bruker vanlig AWS-auth, for eksempel:
 
 - `~/.aws/credentials`
 - named profile
 - AWS SSO
 
-De credentials dere bruker må ha lov til å opprette CloudFormation-stacks, IAM-roller, ECR, ECS, ALB og GitHub OIDC-relatert IAM-oppsett.
+Brukeren dere autentiserer som må kunne opprette CloudFormation-stacks, IAM-roller, ECR, ECS, ALB og GitHub OIDC-relatert IAM-oppsett.
 
-Hvis dere i stedet vil kjøre bootstrap fra GitHub Actions, må dere legge inn disse repo-secretsene:
+### Alternativ B: Via GitHub Actions
+
+Hvis dere vil kjøre bootstrap fra GitHub Actions, må dere legge inn disse repo-secretsene:
 
 - `AWS_BOOTSTRAP_ACCESS_KEY_ID`
 - `AWS_BOOTSTRAP_SECRET_ACCESS_KEY`
@@ -39,76 +36,58 @@ Hvis dere i stedet vil kjøre bootstrap fra GitHub Actions, må dere legge inn d
 
 `AWS_BOOTSTRAP_SESSION_TOKEN` trengs bare hvis dere bruker midlertidige credentials.
 
+Dette er bare for bootstrap. Vanlige deploy-workflows bruker OIDC etterpå.
+
 ## Hva dere må fylle ut
 
-### 1. `network.parameters.handoff.json`
+### `network.parameters.handoff.json`
 
 Denne kan normalt brukes som den er.
 
 Endre bare hvis dere vil bruke andre CIDR-er enn default.
 
-### 2. `runtime.parameters.handoff.json`
+### `runtime.parameters.handoff.json`
 
 Dere må fylle ut:
 
 - `ConfluenceEmail`
 - enten `ConfluenceToken` eller `ConfluenceTokenSecretArn`
-- `ApiImageUri`
-- `ChainlitImageUri`
 
-Anbefalt:
+Image-URI-ene trenger dere normalt ikke å fylle ut.
 
-- bruk `ConfluenceToken` hvis dere vil komme raskt i gang
-- bruk `ConfluenceTokenSecretArn` hvis dere allerede bruker Secrets Manager eller SSM
+Hvis `ApiImageUri` og `ChainlitImageUri` står tomme, utleder `runtime.yaml` automatisk:
 
-`ApiImageUri` og `ChainlitImageUri` skal peke til ECR-repoene i deres konto, for eksempel:
+- `${account}.dkr.ecr.${region}.amazonaws.com/ruter-chatbot:prod-latest`
+- `${account}.dkr.ecr.${region}.amazonaws.com/ruter-chainlit:prod-latest`
 
-```json
-{
-  "ParameterKey": "ApiImageUri",
-  "ParameterValue": "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ruter-chatbot:prod-latest"
-}
-```
+Dere kan fortsatt sette `ApiImageUri` og `ChainlitImageUri` eksplisitt senere hvis dere vil overstyre dette.
 
-```json
-{
-  "ParameterKey": "ChainlitImageUri",
-  "ParameterValue": "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ruter-chainlit:prod-latest"
-}
-```
+### `cicd.parameters.handoff.json`
 
-### 3. `cicd.parameters.handoff.json`
-
-Denne er mest referanse.
-
-Bootstrap-workflowen leser rolle-ARN-er fra runtime-stacken automatisk, så i praksis er det viktigste her:
+Det viktigste her er:
 
 - `GitHubRepository`
 
-Hvis repoet hos dere heter noe annet enn originalen, må dere endre dette.
+Bootstrap-workflowen leser rolle-ARN-er fra runtime-stacken automatisk.
 
-## Anbefalt oppsett
+## Anbefalt rekkefølge
 
-Det finnes to måter å starte opp miljøet på:
+### Hvis dere bootstrapper lokalt
 
-### Alternativ A: Manuell bootstrap fra egen maskin
-
-Dette er anbefalt hvis dere allerede bruker `~/.aws/credentials`, profile eller SSO.
-
-Kjør stackene i denne rekkefølgen:
-
-1. `network.yaml`
-2. `runtime.yaml`
-3. bygg og push første API- og Chainlit-image til ECR
-4. oppdater `runtime.yaml` hvis image-tagene ble endret
-5. `cicd.yaml`
-6. sett GitHub repo-variablene:
+1. Fyll ut `runtime.parameters.handoff.json`
+2. Juster `network.parameters.handoff.json` bare hvis dere vil bruke andre CIDR-er
+3. Deploy `network.yaml`
+4. Deploy `runtime.yaml`
+5. Bygg og push første API- og Chainlit-image til ECR
+6. Deploy eller oppdater `runtime.yaml` igjen hvis dere vil bruke andre image-tagger enn default
+7. Deploy `cicd.yaml`
+8. Sett GitHub repo-variablene:
    - `AWS_REGION`
    - `AWS_ROLE_TO_ASSUME`
 
-### Alternativ B: Bootstrap via GitHub Actions
+### Hvis dere bootstrapper via GitHub Actions
 
-Kjør [Bootstrap AWS environment](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/bootstrap-aws.yml) fra GitHub Actions.
+Kjør [Bootstrap AWS environment](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/bootstrap-aws.yml).
 
 Workflowen gjør dette:
 
@@ -122,8 +101,6 @@ Workflowen gjør dette:
    - `AWS_REGION`
    - `AWS_ROLE_TO_ASSUME`
 
-Etter dette kan vanlige deploy-workflows brukes.
-
 ## Etter bootstrap
 
 Når bootstrap er ferdig, fungerer disse workflowene:
@@ -136,19 +113,19 @@ De kan trigges ved:
 - push til `dev`
 - eller `workflow_dispatch`
 
-## Viktige praktiske noter
+## Viktige noter
 
 - `runtime.yaml` bruker ECS-native blue/green
-- test listeners på `9001` og `9002` er derfor en del av løsningen
+- test listeners på `9001` og `9002` er en del av løsningen
 - `runtime.yaml` støtter både secret ARN og vanlig `NoEcho`-parameter for `CONFLUENCE_TOKEN`
-- bootstrap lager ikke GitHub-repoet; det forutsetter at repoet allerede finnes
+- bootstrap lager ikke GitHub-repoet; repoet må allerede finnes
 
-## Kort oppsummering
+## Kort oppsummert
 
-For mottakerteamet er den praktiske flyten:
+For mottakerteamet er flyten:
 
 1. få repoet
-2. fyll ut `runtime.parameters.handoff.json`
-3. juster `network.parameters.handoff.json` bare hvis ønskelig
-4. bootstrap miljøet enten lokalt eller via GitHub Actions
-5. bruk vanlige deploy-workflows videre
+2. fylle ut `runtime.parameters.handoff.json`
+3. eventuelt justere `network.parameters.handoff.json`
+4. bootstrappe miljøet lokalt eller via GitHub Actions
+5. bruke vanlige deploy-workflows videre

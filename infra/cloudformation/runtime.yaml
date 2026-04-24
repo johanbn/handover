@@ -54,11 +54,21 @@ Parameters:
 
   ApiImageUri:
     Type: String
+    Default: ''
     Description: Full image URI for the API container.
 
   ChainlitImageUri:
     Type: String
+    Default: ''
     Description: Full image URI for the Chainlit container.
+
+  ApiImageTag:
+    Type: String
+    Default: prod-latest
+
+  ChainlitImageTag:
+    Type: String
+    Default: prod-latest
 
   ApiDesiredCount:
     Type: Number
@@ -126,6 +136,8 @@ Conditions:
   HasIngressCidr6: !Not [!Equals [!Ref AllowedIngressCidr6, '']]
   HasConfluenceTokenSecretArn: !Not [!Equals [!Ref ConfluenceTokenSecretArn, '']]
   HasConfluenceTokenPlaintext: !Not [!Equals [!Ref ConfluenceToken, '']]
+  HasApiImageUri: !Not [!Equals [!Ref ApiImageUri, '']]
+  HasChainlitImageUri: !Not [!Equals [!Ref ChainlitImageUri, '']]
 
 Resources:
   RuterChatbotRepository:
@@ -616,7 +628,10 @@ Resources:
       TaskRoleArn: !GetAtt RuterBedrockTaskRole.Arn
       ContainerDefinitions:
         - Name: ruter-prod
-          Image: !Ref ApiImageUri
+          Image: !If
+            - HasApiImageUri
+            - !Ref ApiImageUri
+            - !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ruter-chatbot:${ApiImageTag}
           Essential: true
           PortMappings:
             - ContainerPort: 8000
@@ -661,7 +676,10 @@ Resources:
       TaskRoleArn: !GetAtt RuterBedrockTaskRole.Arn
       ContainerDefinitions:
         - Name: chainlit
-          Image: !Ref ChainlitImageUri
+          Image: !If
+            - HasChainlitImageUri
+            - !Ref ChainlitImageUri
+            - !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ruter-chainlit:${ChainlitImageTag}
           Essential: true
           PortMappings:
             - ContainerPort: 8000

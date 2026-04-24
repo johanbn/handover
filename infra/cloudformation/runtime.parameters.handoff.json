@@ -22,13 +22,5 @@
   {
     "ParameterKey": "ConfluenceToken",
     "ParameterValue": "REPLACE_ME_CONFLUENCE_TOKEN_OR_LEAVE_EMPTY_IF_USING_SECRET_ARN"
-  },
-  {
-    "ParameterKey": "ApiImageUri",
-    "ParameterValue": "REPLACE_ME_ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ruter-chatbot:prod-latest"
-  },
-  {
-    "ParameterKey": "ChainlitImageUri",
-    "ParameterValue": "REPLACE_ME_ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ruter-chainlit:prod-latest"
   }
 ]
