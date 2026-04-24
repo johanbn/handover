@@ -63,7 +63,7 @@ aws sts get-caller-identity
 Fyll ut:
 
 - `infra/cloudformation/runtime.parameters.handoff.json`
-- eventuelt `infra/cloudformation/network.parameters.handoff.json`
+- `infra/cloudformation/network.parameters.handoff.json` bare hvis dere vil endre default nettverks-CIDR-er
 
 ### 4. Opprett nettverket
 
