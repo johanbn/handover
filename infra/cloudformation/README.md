@@ -23,15 +23,21 @@ Denne mappen er laget for teamet som får repoet overlevert og skal sette opp mi
 
 ## Før dere starter
 
-Legg inn disse GitHub repo-secrets:
+Hovedantakelsen i denne guiden er at dere kjører bootstrap manuelt fra egen maskin med vanlig AWS-auth, for eksempel via:
+
+- `~/.aws/credentials`
+- named profile
+- AWS SSO
+
+De credentials dere bruker må ha lov til å opprette CloudFormation-stacks, IAM-roller, ECR, ECS, ALB og GitHub OIDC-relatert IAM-oppsett.
+
+Hvis dere i stedet vil kjøre bootstrap fra GitHub Actions, må dere legge inn disse repo-secretsene:
 
 - `AWS_BOOTSTRAP_ACCESS_KEY_ID`
 - `AWS_BOOTSTRAP_SECRET_ACCESS_KEY`
 - `AWS_BOOTSTRAP_SESSION_TOKEN`
 
 `AWS_BOOTSTRAP_SESSION_TOKEN` trengs bare hvis dere bruker midlertidige credentials.
-
-Disse bootstrap-credentials må ha lov til å opprette CloudFormation-stacks, IAM-roller, ECR, ECS, ALB og GitHub OIDC-relatert IAM-oppsett.
 
 ## Hva dere må fylle ut
 
@@ -83,6 +89,25 @@ Hvis repoet hos dere heter noe annet enn originalen, må dere endre dette.
 
 ## Anbefalt oppsett
 
+Det finnes to måter å starte opp miljøet på:
+
+### Alternativ A: Manuell bootstrap fra egen maskin
+
+Dette er anbefalt hvis dere allerede bruker `~/.aws/credentials`, profile eller SSO.
+
+Kjør stackene i denne rekkefølgen:
+
+1. `network.yaml`
+2. `runtime.yaml`
+3. bygg og push første API- og Chainlit-image til ECR
+4. oppdater `runtime.yaml` hvis image-tagene ble endret
+5. `cicd.yaml`
+6. sett GitHub repo-variablene:
+   - `AWS_REGION`
+   - `AWS_ROLE_TO_ASSUME`
+
+### Alternativ B: Bootstrap via GitHub Actions
+
 Kjør [Bootstrap AWS environment](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/bootstrap-aws.yml) fra GitHub Actions.
 
 Workflowen gjør dette:
@@ -111,17 +136,6 @@ De kan trigges ved:
 - push til `dev`
 - eller `workflow_dispatch`
 
-## Hvis dere vil deploye manuelt
-
-Det går også an å deploye stackene manuelt, men bootstrap-workflowen er anbefalt fordi den håndterer rekkefølgen riktig.
-
-Hvis dere deployer manuelt må rekkefølgen være:
-
-1. `network.yaml`
-2. `runtime.yaml` med images tilgjengelig i ECR
-3. `cicd.yaml`
-4. sett repo-variablene `AWS_REGION` og `AWS_ROLE_TO_ASSUME`
-
 ## Viktige praktiske noter
 
 - `runtime.yaml` bruker ECS-native blue/green
@@ -134,8 +148,7 @@ Hvis dere deployer manuelt må rekkefølgen være:
 For mottakerteamet er den praktiske flyten:
 
 1. få repoet
-2. legg inn bootstrap-secrets i GitHub
-3. fyll ut `runtime.parameters.handoff.json`
-4. juster `network.parameters.handoff.json` bare hvis ønskelig
-5. kjør `Bootstrap AWS environment`
-6. bruk vanlige deploy-workflows videre
+2. fyll ut `runtime.parameters.handoff.json`
+3. juster `network.parameters.handoff.json` bare hvis ønskelig
+4. bootstrap miljøet enten lokalt eller via GitHub Actions
+5. bruk vanlige deploy-workflows videre
