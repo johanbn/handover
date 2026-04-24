@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "GitHubRepository",
+    "ParameterValue": "johanbn89/ruter_chatbot"
+  },
+  {
+    "ParameterKey": "TaskExecutionRoleArn",
+    "ParameterValue": "arn:aws:iam::123456789012:role/ruter-ecs-task-execution-role"
+  },
+  {
+    "ParameterKey": "BedrockTaskRoleArn",
+    "ParameterValue": "arn:aws:iam::123456789012:role/ruter-bedrock-task-role"
+  }
+]

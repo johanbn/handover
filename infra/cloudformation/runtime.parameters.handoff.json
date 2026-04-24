@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "REPLACE_ME_VPC_ID"
+  },
+  {
+    "ParameterKey": "AlbSubnetIds",
+    "ParameterValue": "REPLACE_ME_ALB_SUBNET_ID_1,REPLACE_ME_ALB_SUBNET_ID_2"
+  },
+  {
+    "ParameterKey": "ServiceSubnetIds",
+    "ParameterValue": "REPLACE_ME_SERVICE_SUBNET_ID_1,REPLACE_ME_SERVICE_SUBNET_ID_2"
+  },
+  {
+    "ParameterKey": "ConfluenceEmail",
+    "ParameterValue": "REPLACE_ME_CONFLUENCE_EMAIL"
+  },
+  {
+    "ParameterKey": "ConfluenceTokenSecretArn",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ConfluenceToken",
+    "ParameterValue": "REPLACE_ME_CONFLUENCE_TOKEN_OR_LEAVE_EMPTY_IF_USING_SECRET_ARN"
+  },
+  {
+    "ParameterKey": "ApiImageUri",
+    "ParameterValue": "REPLACE_ME_ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ruter-chatbot:prod-latest"
+  },
+  {
+    "ParameterKey": "ChainlitImageUri",
+    "ParameterValue": "REPLACE_ME_ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/ruter-chainlit:prod-latest"
+  }
+]
