@@ -4,19 +4,19 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm AS builder
 WORKDIR /app
 
 # Copy dependency metadata
-COPY pyproject.toml .python-version uv.lock ./
+COPY pyproject.toml .python-version ./
 
 # Put the virtualenv somewhere not covered by the bind mount
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# Install deps at build time into /opt/venv
-RUN uv sync --frozen --group prod --no-install-project
+# Resolve and install deps at build time into /opt/venv
+RUN uv lock && uv sync --frozen --group prod --no-install-project
 
 # Copy the full source
 COPY src ./src
 
 # install project
-RUN uv sync --group prod --frozen
+RUN uv sync --frozen --group prod
 
 # Runtime image
 FROM python:3.12-slim-bookworm AS Runtime
