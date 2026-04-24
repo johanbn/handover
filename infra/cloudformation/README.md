@@ -4,13 +4,13 @@ Denne mappen er laget for teamet som får repoet overlevert og skal sette opp mi
 
 ## Filer
 
-- [network.yaml](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/network.yaml)
-- [runtime.yaml](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/runtime.yaml)
-- [cicd.yaml](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/cicd.yaml)
-- [network.parameters.handoff.json](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/network.parameters.handoff.json)
-- [runtime.parameters.handoff.json](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/runtime.parameters.handoff.json)
-- [cicd.parameters.handoff.json](/C:/Users/JohanNorlinder/ruter_chatbot/infra/cloudformation/cicd.parameters.handoff.json)
-- [bootstrap-aws.yml](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/bootstrap-aws.yml)
+- [network.yaml](network.yaml)
+- [runtime.yaml](runtime.yaml)
+- [cicd.yaml](cicd.yaml)
+- [network.parameters.handoff.json](network.parameters.handoff.json)
+- [runtime.parameters.handoff.json](runtime.parameters.handoff.json)
+- [cicd.parameters.handoff.json](cicd.parameters.handoff.json)
+- [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml)
 
 `*.handoff.json` er filene som skal brukes ved overlevering. `*.example.json` er bare referanser.
 
@@ -274,7 +274,7 @@ Ellers kan disse settes i GitHub UI:
 
 ## Bootstrap via GitHub Actions
 
-Hvis dere heller vil kjøre init fra GitHub Actions, kan dere bruke [bootstrap-aws.yml](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/bootstrap-aws.yml).
+Hvis dere heller vil kjøre init fra GitHub Actions, kan dere bruke [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml).
 
 Da må disse repo-secretsene være satt:
 
@@ -288,8 +288,8 @@ Vanlige deploy-workflows bruker fortsatt OIDC etterpå.
 
 Når bootstrap er ferdig, fungerer disse workflowene:
 
-- [deploy-api.yml](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/deploy-api.yml)
-- [deploy-chainlit.yml](/C:/Users/JohanNorlinder/ruter_chatbot/.github/workflows/deploy-chainlit.yml)
+- [deploy-api.yml](../../.github/workflows/deploy-api.yml)
+- [deploy-chainlit.yml](../../.github/workflows/deploy-chainlit.yml)
 
 De kan trigges ved:
 
