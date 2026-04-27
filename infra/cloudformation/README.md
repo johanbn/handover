@@ -48,18 +48,19 @@ Flyten er:
 
 1. Fyll ut `infra/cloudformation/runtime.parameters.handoff.json`
 2. Endre `infra/cloudformation/network.parameters.handoff.json` bare hvis dere vil bruke andre nettverks-CIDR-er enn default
-3. Legg inn disse repo-secretsene i GitHub:
+3. Gå til `Settings -> Actions -> General -> Workflow permissions` i GitHub-repoet og velg `Read and write permissions`
+4. Legg inn disse repo-secretsene i GitHub:
    - `AWS_BOOTSTRAP_ACCESS_KEY_ID`
    - `AWS_BOOTSTRAP_SECRET_ACCESS_KEY`
    - `AWS_BOOTSTRAP_SESSION_TOKEN` hvis dere bruker midlertidige credentials
    - `CONFLUENCE_TOKEN`
    - `BOOTSTRAP_GITHUB_TOKEN` hvis repoets `GITHUB_TOKEN` ikke får skrive Actions variables
-4. Gå til GitHub-repoet
-5. Åpne `Actions`
-6. Velg [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml)
-7. Klikk `Run workflow`
-8. Velg branch
-9. Start workflowen i GitHub UI
+5. Gå til GitHub-repoet
+6. Åpne `Actions`
+7. Velg [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml)
+8. Klikk `Run workflow`
+9. Velg branch
+10. Start workflowen i GitHub UI
 
 Når workflowen kjører, gjør den dette:
 
@@ -71,6 +72,11 @@ Når workflowen kjører, gjør den dette:
 6. Setter repo-variablene `AWS_REGION` og `AWS_ROLE_TO_ASSUME`
 
 Etter dette bruker vanlige deploy-workflows OIDC, ikke bootstrap-secrets.
+
+Viktig: `Read and write permissions` trengs fordi bootstrap-workflowen skal sette
+GitHub Actions-variablene `AWS_REGION` og `AWS_ROLE_TO_ASSUME` selv. Disse
+variablene peker deploy-workflowene til AWS OIDC-rollen som ble opprettet av
+`cicd.yaml`. Uten disse variablene er ikke bootstrap komplett.
 
 Hvis GitHub nekter å sette repo-variabler med `GITHUB_TOKEN`, opprett en fine-grained
 GitHub token for målrepoet med `Variables: Read and write`, og lagre den som
