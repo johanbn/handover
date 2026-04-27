@@ -211,6 +211,12 @@ jobs:
               --output table || true
           }
 
+          ecr_repositories_exist() {
+            aws ecr describe-repositories \
+              --region "${AWS_REGION}" \
+              --repository-names ruter-chatbot ruter-chainlit >/dev/null 2>&1
+          }
+
           STACK_EXISTS=false
           if aws cloudformation describe-stacks --stack-name "${RUNTIME_STACK_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
             STACK_EXISTS=true
@@ -220,7 +226,11 @@ jobs:
               --query "Stacks[0].StackStatus" \
               --output text)"
 
-            if [ "${STACK_STATUS}" = "ROLLBACK_COMPLETE" ]; then
+            if [[ "${STACK_STATUS}" == *"IN_PROGRESS"* ]]; then
+              echo "Runtime stack is ${STACK_STATUS}; wait for it to finish before rerunning bootstrap"
+              print_stack_events
+              exit 1
+            elif [ "${STACK_STATUS}" = "ROLLBACK_COMPLETE" ]; then
               echo "Runtime stack is ${STACK_STATUS}; deleting it before retry"
               print_stack_events
               aws cloudformation delete-stack \
@@ -231,37 +241,42 @@ jobs:
                 --stack-name "${RUNTIME_STACK_NAME}"
               STACK_EXISTS=false
             else
-              echo "Runtime stack already exists with status ${STACK_STATUS}; applying foundation parameters"
+              echo "Runtime stack already exists with status ${STACK_STATUS}"
             fi
           fi
 
           if [ "${STACK_EXISTS}" = "true" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            set +e
-            UPDATE_OUTPUT="$(aws cloudformation update-stack \
-              --region "${AWS_REGION}" \
-              --stack-name "${RUNTIME_STACK_NAME}" \
-              --template-body file://infra/cloudformation/runtime.yaml \
-              --parameters file://"${{ steps.runtime_param_files.outputs.foundation }}" \
-              --capabilities CAPABILITY_NAMED_IAM 2>&1)"
-            UPDATE_EXIT=$?
-            set -e
-
-            if [ ${UPDATE_EXIT} -ne 0 ]; then
-              if echo "${UPDATE_OUTPUT}" | grep -q "No updates are to be performed"; then
-                echo "Runtime foundation stack already up to date"
-              else
-                echo "${UPDATE_OUTPUT}"
-                print_stack_events
-                exit ${UPDATE_EXIT}
-              fi
+            if ecr_repositories_exist; then
+              echo "Runtime foundation already exists; skipping foundation update"
             else
-              if ! aws cloudformation wait stack-update-complete \
+              echo "Runtime stack exists but expected ECR repositories are missing; applying foundation parameters"
+              set +e
+              UPDATE_OUTPUT="$(aws cloudformation update-stack \
                 --region "${AWS_REGION}" \
-                --stack-name "${RUNTIME_STACK_NAME}"; then
-                echo "Runtime stack failed to update. Recent stack events:"
-                print_stack_events
-                exit 1
+                --stack-name "${RUNTIME_STACK_NAME}" \
+                --template-body file://infra/cloudformation/runtime.yaml \
+                --parameters file://"${{ steps.runtime_param_files.outputs.foundation }}" \
+                --capabilities CAPABILITY_NAMED_IAM 2>&1)"
+              UPDATE_EXIT=$?
+              set -e
+
+              if [ ${UPDATE_EXIT} -ne 0 ]; then
+                if echo "${UPDATE_OUTPUT}" | grep -q "No updates are to be performed"; then
+                  echo "Runtime foundation stack already up to date"
+                else
+                  echo "${UPDATE_OUTPUT}"
+                  print_stack_events
+                  exit ${UPDATE_EXIT}
+                fi
+              else
+                if ! aws cloudformation wait stack-update-complete \
+                  --region "${AWS_REGION}" \
+                  --stack-name "${RUNTIME_STACK_NAME}"; then
+                  echo "Runtime stack failed to update. Recent stack events:"
+                  print_stack_events
+                  exit 1
+                fi
               fi
             fi
           else
@@ -284,9 +299,7 @@ jobs:
           fi
 
           echo "Verifying ECR repositories from runtime foundation"
-          if ! aws ecr describe-repositories \
-            --region "${AWS_REGION}" \
-            --repository-names ruter-chatbot ruter-chainlit >/dev/null; then
+          if ! ecr_repositories_exist; then
             echo "Runtime foundation completed, but expected ECR repositories are missing. Recent stack events:"
             print_stack_events
             exit 1
