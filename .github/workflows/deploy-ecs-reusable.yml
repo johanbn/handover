@@ -1,5 +1,6 @@
 name: Deploy ECS reusable
 
+# Shared deployment implementation for the API and Chainlit workflows.
 on:
   workflow_call:
     inputs:
