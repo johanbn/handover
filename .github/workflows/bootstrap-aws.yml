@@ -173,11 +173,40 @@ jobs:
         run: |
           set -euo pipefail
 
+          print_stack_events() {
+            aws cloudformation describe-stack-events \
+              --region "${AWS_REGION}" \
+              --stack-name "${RUNTIME_STACK_NAME}" \
+              --query "StackEvents[?ResourceStatusReason!=null].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
+              --output table || true
+          }
+
           if aws cloudformation describe-stacks --stack-name "${RUNTIME_STACK_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Runtime stack already exists, skipping foundation-only bootstrap pass"
+            STACK_STATUS="$(aws cloudformation describe-stacks \
+              --region "${AWS_REGION}" \
+              --stack-name "${RUNTIME_STACK_NAME}" \
+              --query "Stacks[0].StackStatus" \
+              --output text)"
+
+            if [ "${STACK_STATUS}" = "ROLLBACK_COMPLETE" ]; then
+              echo "Runtime stack is ${STACK_STATUS}; deleting it before retry"
+              print_stack_events
+              aws cloudformation delete-stack \
+                --region "${AWS_REGION}" \
+                --stack-name "${RUNTIME_STACK_NAME}"
+              aws cloudformation wait stack-delete-complete \
+                --region "${AWS_REGION}" \
+                --stack-name "${RUNTIME_STACK_NAME}"
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              echo "Runtime stack already exists with status ${STACK_STATUS}, skipping foundation-only bootstrap pass"
+            fi
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if ! aws cloudformation describe-stacks --stack-name "${RUNTIME_STACK_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
             echo "Creating runtime stack foundation ${RUNTIME_STACK_NAME}"
             aws cloudformation create-stack \
               --region "${AWS_REGION}" \
@@ -186,9 +215,13 @@ jobs:
               --parameters file://"${{ steps.runtime_param_files.outputs.foundation }}" \
               --capabilities CAPABILITY_NAMED_IAM
 
-            aws cloudformation wait stack-create-complete \
+            if ! aws cloudformation wait stack-create-complete \
               --region "${AWS_REGION}" \
-              --stack-name "${RUNTIME_STACK_NAME}"
+              --stack-name "${RUNTIME_STACK_NAME}"; then
+              echo "Runtime stack failed to create. Recent stack events:"
+              print_stack_events
+              exit 1
+            fi
           fi
 
       - name: Read AWS account id
