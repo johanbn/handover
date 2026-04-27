@@ -167,6 +167,29 @@ jobs:
               out.write(f"foundation={foundation_path.as_posix()}\n")
           PY
 
+      - name: Ensure ECS service-linked role
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          set +e
+          OUTPUT="$(aws iam create-service-linked-role \
+            --aws-service-name ecs.amazonaws.com \
+            --description "Service-linked role used by Amazon ECS." 2>&1)"
+          EXIT_CODE=$?
+          set -e
+
+          if [ ${EXIT_CODE} -ne 0 ]; then
+            if echo "${OUTPUT}" | grep -qi "already exists"; then
+              echo "ECS service-linked role already exists"
+            else
+              echo "${OUTPUT}"
+              exit ${EXIT_CODE}
+            fi
+          else
+            echo "Created ECS service-linked role"
+          fi
+
       - name: Deploy runtime foundation stack
         id: runtime_stack
         shell: bash
