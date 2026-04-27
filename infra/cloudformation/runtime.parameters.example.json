@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "vpc-08a441e3593d0da72"
+  },
+  {
+    "ParameterKey": "AlbSubnetIds",
+    "ParameterValue": "subnet-045fd688267d0da55,subnet-0580a22b36150a01e"
+  },
+  {
+    "ParameterKey": "ServiceSubnetIds",
+    "ParameterValue": "subnet-045fd688267d0da55,subnet-0580a22b36150a01e"
+  },
+  {
+    "ParameterKey": "ConfluenceEmail",
+    "ParameterValue": "kundeservice@example.com"
+  },
+  {
+    "ParameterKey": "ConfluenceTokenSecretArn",
+    "ParameterValue": "arn:aws:secretsmanager:eu-west-1:123456789012:secret:confluence-token"
+  },
+  {
+    "ParameterKey": "ConfluenceToken",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ApiImageUri",
+    "ParameterValue": "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ruter-chatbot:prod-latest"
+  },
+  {
+    "ParameterKey": "ChainlitImageUri",
+    "ParameterValue": "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ruter-chainlit:prod-latest"
+  }
+]

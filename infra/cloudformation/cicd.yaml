@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: GitHub Actions OIDC and deploy role for the Ruter chatbot environment.
+
+Parameters:
+  GitHubRepository:
+    Type: String
+    Default: johanbn89/ruter_chatbot
+    Description: owner/repo used by GitHub Actions.
+
+  DevBranchName:
+    Type: String
+    Default: dev
+
+  MainBranchName:
+    Type: String
+    Default: main
+
+  ChatbotRepositoryName:
+    Type: String
+    Default: ruter-chatbot
+
+  ChainlitRepositoryName:
+    Type: String
+    Default: ruter-chainlit
+
+  TaskExecutionRoleArn:
+    Type: String
+    Description: ARN of the ECS task execution role from runtime.yaml.
+
+  BedrockTaskRoleArn:
+    Type: String
+    Description: ARN of the ECS task role from runtime.yaml.
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  GitHubActionsDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: GitHubActionsDeployRole
+      Description: OIDC deploy role for GitHub Actions ECS deploys
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - !Sub repo:${GitHubRepository}:ref:refs/heads/${DevBranchName}
+                  - !Sub repo:${GitHubRepository}:ref:refs/heads/${MainBranchName}
+      Policies:
+        - PolicyName: GitHubActionsDeployPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: EcrLogin
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Sid: EcrPushPull
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:DescribeImages
+                Resource:
+                  - !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ChatbotRepositoryName}
+                  - !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ChainlitRepositoryName}
+              - Sid: EcsDeploy
+                Effect: Allow
+                Action:
+                  - ecs:DescribeServices
+                  - ecs:DescribeTaskDefinition
+                  - ecs:RegisterTaskDefinition
+                  - ecs:UpdateService
+                Resource: '*'
+              - Sid: PassTaskRoles
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !Ref TaskExecutionRoleArn
+                  - !Ref BedrockTaskRoleArn
+
+Outputs:
+  GitHubOidcProviderArn:
+    Value: !Ref GitHubOidcProvider
+  GitHubActionsDeployRoleArn:
+    Value: !GetAtt GitHubActionsDeployRole.Arn

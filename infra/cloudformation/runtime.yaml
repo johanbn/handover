@@ -1,0 +1,903 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Runtime infrastructure for the Ruter chatbot environment in eu-west-1.
+
+Parameters:
+  ProjectTagValue:
+    Type: String
+    Default: chatbot
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC used by ECS services and the ALB.
+
+  AlbSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Two public subnets for the ALB.
+
+  ServiceSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets used by ECS tasks.
+
+  AllowedIngressCidr1:
+    Type: String
+    Default: 192.168.1.242/32
+  AllowedIngressCidr2:
+    Type: String
+    Default: 79.160.136.138/32
+  AllowedIngressCidr3:
+    Type: String
+    Default: 188.95.247.0/24
+  AllowedIngressCidr4:
+    Type: String
+    Default: 185.4.36.54/32
+  AllowedIngressCidr5:
+    Type: String
+    Default: 109.169.99.157/32
+  AllowedIngressCidr6:
+    Type: String
+    Default: 195.1.142.230/32
+
+  ConfluenceEmail:
+    Type: String
+    Description: Email used for Confluence access.
+
+  ConfluenceTokenSecretArn:
+    Type: String
+    Default: ''
+    Description: ARN for the Secrets Manager secret or SSM parameter containing CONFLUENCE_TOKEN.
+
+  ConfluenceToken:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Plaintext CONFLUENCE_TOKEN fallback for environments that do not use Secrets Manager or SSM.
+
+  ApiImageUri:
+    Type: String
+    Default: ''
+    Description: Full image URI for the API container.
+
+  ChainlitImageUri:
+    Type: String
+    Default: ''
+    Description: Full image URI for the Chainlit container.
+
+  ApiImageTag:
+    Type: String
+    Default: prod-latest
+
+  ChainlitImageTag:
+    Type: String
+    Default: prod-latest
+
+  ApiDesiredCount:
+    Type: Number
+    Default: 1
+  ChainlitDesiredCount:
+    Type: Number
+    Default: 1
+
+  ApiCpu:
+    Type: String
+    Default: '1024'
+  ApiMemory:
+    Type: String
+    Default: '3072'
+  ChainlitCpu:
+    Type: String
+    Default: '1024'
+  ChainlitMemory:
+    Type: String
+    Default: '3072'
+
+  BlueGreenBakeTimeMinutes:
+    Type: Number
+    Default: 5
+
+  ApiHealthGracePeriodSeconds:
+    Type: Number
+    Default: 300
+  ChainlitHealthGracePeriodSeconds:
+    Type: Number
+    Default: 300
+
+  ApiMinCapacity:
+    Type: Number
+    Default: 1
+  ApiMaxCapacity:
+    Type: Number
+    Default: 2
+  ChainlitMinCapacity:
+    Type: Number
+    Default: 1
+  ChainlitMaxCapacity:
+    Type: Number
+    Default: 2
+
+  ApiCpuTargetValue:
+    Type: Number
+    Default: 60
+  ApiMemoryTargetValue:
+    Type: Number
+    Default: 70
+  ChainlitCpuTargetValue:
+    Type: Number
+    Default: 80
+  ChainlitMemoryTargetValue:
+    Type: Number
+    Default: 70
+
+Conditions:
+  HasIngressCidr1: !Not [!Equals [!Ref AllowedIngressCidr1, '']]
+  HasIngressCidr2: !Not [!Equals [!Ref AllowedIngressCidr2, '']]
+  HasIngressCidr3: !Not [!Equals [!Ref AllowedIngressCidr3, '']]
+  HasIngressCidr4: !Not [!Equals [!Ref AllowedIngressCidr4, '']]
+  HasIngressCidr5: !Not [!Equals [!Ref AllowedIngressCidr5, '']]
+  HasIngressCidr6: !Not [!Equals [!Ref AllowedIngressCidr6, '']]
+  HasConfluenceTokenSecretArn: !Not [!Equals [!Ref ConfluenceTokenSecretArn, '']]
+  HasConfluenceTokenPlaintext: !Not [!Equals [!Ref ConfluenceToken, '']]
+  HasApiImageUri: !Not [!Equals [!Ref ApiImageUri, '']]
+  HasChainlitImageUri: !Not [!Equals [!Ref ChainlitImageUri, '']]
+
+Resources:
+  RuterChatbotRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ruter-chatbot
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: false
+      EncryptionConfiguration:
+        EncryptionType: AES256
+
+  RuterChainlitRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: ruter-chainlit
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: false
+      EncryptionConfiguration:
+        EncryptionType: AES256
+
+  RuterChatbotCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: ruter-chatbot
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      ClusterSettings:
+        - Name: containerInsights
+          Value: disabled
+      Configuration:
+        ExecuteCommandConfiguration:
+          Logging: DEFAULT
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  ChatbotLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/ruter-chatbot
+      LogGroupClass: STANDARD
+      DeletionProtectionEnabled: false
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  ChainlitLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/ruter-chainlit
+      LogGroupClass: STANDARD
+      DeletionProtectionEnabled: false
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  RuterEcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ruter-ecs-task-execution-role
+      Description: Allows ECS tasks to call AWS services on your behalf.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  RuterBedrockTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ruter-bedrock-task-role
+      Description: Allows ECS tasks to call AWS services on your behalf. Bedrock
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  EcsInfrastructureRoleForLoadBalancers:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ecsInfrastructureRoleForLoadBalancers
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAccessToECSForInfrastructureManagement
+            Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForLoadBalancers
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  RuterAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ruter-alb-sg
+      GroupDescription: alb for chatbot and api
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  RuterEcsServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ruter-ecs-service-sg
+      GroupDescription: Ingress from ALB to ECS services
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !Ref RuterAlbSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  AlbIngress80Cidr1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr1
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Ref AllowedIngressCidr1
+  AlbIngress80Cidr2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr2
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Ref AllowedIngressCidr2
+  AlbIngress80Cidr3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr3
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Ref AllowedIngressCidr3
+  AlbIngress80Cidr4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr4
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Ref AllowedIngressCidr4
+  AlbIngress80Cidr5:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr5
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Ref AllowedIngressCidr5
+  AlbIngress80Cidr6:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr6
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Ref AllowedIngressCidr6
+
+  AlbIngress8080Cidr1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr1
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: !Ref AllowedIngressCidr1
+  AlbIngress8080Cidr2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr2
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: !Ref AllowedIngressCidr2
+  AlbIngress8080Cidr3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr3
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: !Ref AllowedIngressCidr3
+  AlbIngress8080Cidr4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr4
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: !Ref AllowedIngressCidr4
+  AlbIngress8080Cidr5:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr5
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: !Ref AllowedIngressCidr5
+  AlbIngress8080Cidr6:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasIngressCidr6
+    Properties:
+      GroupId: !Ref RuterAlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: !Ref AllowedIngressCidr6
+
+  RuterAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: ruter-alb
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref RuterAlbSecurityGroup
+      Subnets: !Ref AlbSubnetIds
+      IpAddressType: ipv4
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  ApiTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ruter-api-tg
+      Protocol: HTTP
+      Port: 8000
+      VpcId: !Ref VpcId
+      TargetType: ip
+      ProtocolVersion: HTTP1
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /docs
+      HealthCheckPort: traffic-port
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200'
+
+  ApiGreenTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ruter-api-green-tg
+      Protocol: HTTP
+      Port: 8000
+      VpcId: !Ref VpcId
+      TargetType: ip
+      ProtocolVersion: HTTP1
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /docs
+      HealthCheckPort: traffic-port
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200'
+
+  ChainlitTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ruter-chainlit-tg
+      Protocol: HTTP
+      Port: 8000
+      VpcId: !Ref VpcId
+      TargetType: ip
+      ProtocolVersion: HTTP1
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckPort: traffic-port
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200'
+
+  ChainlitGreenTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ruter-chainlit-green-tg
+      Protocol: HTTP
+      Port: 8000
+      VpcId: !Ref VpcId
+      TargetType: ip
+      ProtocolVersion: HTTP1
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckPort: traffic-port
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200'
+
+  ChainlitListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref RuterAlb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ChainlitTargetGroup
+
+  ApiListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref RuterAlb
+      Port: 8080
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ApiTargetGroup
+
+  ChainlitTestListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref RuterAlb
+      Port: 9001
+      Protocol: HTTP
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: Chainlit test listener default
+            StatusCode: '404'
+
+  ApiTestListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref RuterAlb
+      Port: 9002
+      Protocol: HTTP
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: API test listener default
+            StatusCode: '404'
+
+  ChainlitProductionRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ChainlitListener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /*
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroupStickinessConfig:
+              Enabled: false
+            TargetGroups:
+              - TargetGroupArn: !Ref ChainlitTargetGroup
+                Weight: 100
+              - TargetGroupArn: !Ref ChainlitGreenTargetGroup
+                Weight: 0
+
+  ChainlitTestRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ChainlitTestListener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /*
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroupStickinessConfig:
+              Enabled: false
+            TargetGroups:
+              - TargetGroupArn: !Ref ChainlitTargetGroup
+                Weight: 100
+              - TargetGroupArn: !Ref ChainlitGreenTargetGroup
+                Weight: 0
+
+  ApiProductionRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ApiListener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /*
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroupStickinessConfig:
+              Enabled: false
+            TargetGroups:
+              - TargetGroupArn: !Ref ApiTargetGroup
+                Weight: 100
+              - TargetGroupArn: !Ref ApiGreenTargetGroup
+                Weight: 0
+
+  ApiTestRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ApiTestListener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /*
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroupStickinessConfig:
+              Enabled: false
+            TargetGroups:
+              - TargetGroupArn: !Ref ApiTargetGroup
+                Weight: 100
+              - TargetGroupArn: !Ref ApiGreenTargetGroup
+                Weight: 0
+
+  ApiTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: ruter-chatbot
+      Cpu: !Ref ApiCpu
+      Memory: !Ref ApiMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: X86_64
+      ExecutionRoleArn: !GetAtt RuterEcsTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt RuterBedrockTaskRole.Arn
+      ContainerDefinitions:
+        - Name: ruter-prod
+          Image: !If
+            - HasApiImageUri
+            - !Ref ApiImageUri
+            - !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ruter-chatbot:${ApiImageTag}
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8000
+              HostPort: 8000
+              Protocol: tcp
+              AppProtocol: http
+              Name: ruter-prod-8000-tcp
+          Environment:
+            - Name: CONFLUENCE_EMAIL
+              Value: !Ref ConfluenceEmail
+            - !If
+              - HasConfluenceTokenPlaintext
+              - Name: CONFLUENCE_TOKEN
+                Value: !Ref ConfluenceToken
+              - !Ref AWS::NoValue
+          Secrets:
+            - !If
+              - HasConfluenceTokenSecretArn
+              - Name: CONFLUENCE_TOKEN
+                ValueFrom: !Ref ConfluenceTokenSecretArn
+              - !Ref AWS::NoValue
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ChatbotLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  ChainlitTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: ruter-chainlit
+      Cpu: !Ref ChainlitCpu
+      Memory: !Ref ChainlitMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: X86_64
+      ExecutionRoleArn: !GetAtt RuterEcsTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt RuterBedrockTaskRole.Arn
+      ContainerDefinitions:
+        - Name: chainlit
+          Image: !If
+            - HasChainlitImageUri
+            - !Ref ChainlitImageUri
+            - !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ruter-chainlit:${ChainlitImageTag}
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8000
+              HostPort: 8000
+              Protocol: tcp
+              AppProtocol: http
+              Name: chainlit-8000-tcp
+          Environment:
+            - Name: CONFLUENCE_EMAIL
+              Value: !Ref ConfluenceEmail
+            - Name: PORT
+              Value: '8000'
+            - !If
+              - HasConfluenceTokenPlaintext
+              - Name: CONFLUENCE_TOKEN
+                Value: !Ref ConfluenceToken
+              - !Ref AWS::NoValue
+          Secrets:
+            - !If
+              - HasConfluenceTokenSecretArn
+              - Name: CONFLUENCE_TOKEN
+                ValueFrom: !Ref ConfluenceTokenSecretArn
+              - !Ref AWS::NoValue
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ChainlitLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  ApiService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ApiProductionRule
+      - ApiTestRule
+    Properties:
+      ServiceName: ruter-chatbot-service
+      Cluster: !Ref RuterChatbotCluster
+      TaskDefinition: !Ref ApiTaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: !Ref ApiDesiredCount
+      SchedulingStrategy: REPLICA
+      AvailabilityZoneRebalancing: ENABLED
+      HealthCheckGracePeriodSeconds: !Ref ApiHealthGracePeriodSeconds
+      DeploymentController:
+        Type: ECS
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        Strategy: BLUE_GREEN
+        BakeTimeInMinutes: !Ref BlueGreenBakeTimeMinutes
+      EnableECSManagedTags: true
+      EnableExecuteCommand: false
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref RuterEcsServiceSecurityGroup
+          Subnets: !Ref ServiceSubnetIds
+      LoadBalancers:
+        - ContainerName: ruter-prod
+          ContainerPort: 8000
+          TargetGroupArn: !Ref ApiTargetGroup
+          AdvancedConfiguration:
+            AlternateTargetGroupArn: !Ref ApiGreenTargetGroup
+            ProductionListenerRule: !Ref ApiProductionRule
+            TestListenerRule: !Ref ApiTestRule
+            RoleArn: !GetAtt EcsInfrastructureRoleForLoadBalancers.Arn
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  ChainlitService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ChainlitProductionRule
+      - ChainlitTestRule
+    Properties:
+      ServiceName: ruter-chainlit-service
+      Cluster: !Ref RuterChatbotCluster
+      TaskDefinition: !Ref ChainlitTaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: !Ref ChainlitDesiredCount
+      SchedulingStrategy: REPLICA
+      AvailabilityZoneRebalancing: ENABLED
+      HealthCheckGracePeriodSeconds: !Ref ChainlitHealthGracePeriodSeconds
+      DeploymentController:
+        Type: ECS
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        Strategy: BLUE_GREEN
+        BakeTimeInMinutes: !Ref BlueGreenBakeTimeMinutes
+      EnableECSManagedTags: true
+      EnableExecuteCommand: false
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref RuterEcsServiceSecurityGroup
+          Subnets: !Ref ServiceSubnetIds
+      LoadBalancers:
+        - ContainerName: chainlit
+          ContainerPort: 8000
+          TargetGroupArn: !Ref ChainlitTargetGroup
+          AdvancedConfiguration:
+            AlternateTargetGroupArn: !Ref ChainlitGreenTargetGroup
+            ProductionListenerRule: !Ref ChainlitProductionRule
+            TestListenerRule: !Ref ChainlitTestRule
+            RoleArn: !GetAtt EcsInfrastructureRoleForLoadBalancers.Arn
+      Tags:
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  ApiScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: ApiService
+    Properties:
+      MinCapacity: !Ref ApiMinCapacity
+      MaxCapacity: !Ref ApiMaxCapacity
+      ResourceId: !Sub service/${RuterChatbotCluster}/${ApiService.Name}
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  ApiCpuScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ruter-chatbot-service-cpu-60
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ApiScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        TargetValue: !Ref ApiCpuTargetValue
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 180
+
+  ApiMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ruter-chatbot-service-memory-70
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ApiScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        TargetValue: !Ref ApiMemoryTargetValue
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 180
+
+  ChainlitScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: ChainlitService
+    Properties:
+      MinCapacity: !Ref ChainlitMinCapacity
+      MaxCapacity: !Ref ChainlitMaxCapacity
+      ResourceId: !Sub service/${RuterChatbotCluster}/${ChainlitService.Name}
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  ChainlitCpuScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ruter-chainlit-service-cpu-80
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ChainlitScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        TargetValue: !Ref ChainlitCpuTargetValue
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 180
+
+  ChainlitMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ruter-chainlit-service-memory-70
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ChainlitScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        TargetValue: !Ref ChainlitMemoryTargetValue
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 180
+
+Outputs:
+  ClusterName:
+    Value: !Ref RuterChatbotCluster
+  ApiServiceName:
+    Value: !Ref ApiService
+  ChainlitServiceName:
+    Value: !Ref ChainlitService
+  AlbDnsName:
+    Value: !GetAtt RuterAlb.DNSName
+  TaskExecutionRoleArn:
+    Value: !GetAtt RuterEcsTaskExecutionRole.Arn
+  BedrockTaskRoleArn:
+    Value: !GetAtt RuterBedrockTaskRole.Arn
+  LoadBalancerArn:
+    Value: !Ref RuterAlb
+  ApiRepositoryUri:
+    Value: !GetAtt RuterChatbotRepository.RepositoryUri
+  ChainlitRepositoryUri:
+    Value: !GetAtt RuterChainlitRepository.RepositoryUri
+  ApiTargetGroupArn:
+    Value: !Ref ApiTargetGroup
+  ApiGreenTargetGroupArn:
+    Value: !Ref ApiGreenTargetGroup
+  ChainlitTargetGroupArn:
+    Value: !Ref ChainlitTargetGroup
+  ChainlitGreenTargetGroupArn:
+    Value: !Ref ChainlitGreenTargetGroup

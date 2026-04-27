@@ -1,0 +1,37 @@
+name: Deploy Chainlit to ECS
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+    paths:
+      - Dockerfile.chainlit
+      - pyproject.toml
+      - uv.lock
+      - src/**
+      - .chainlit/**
+      - .github/workflows/deploy-chainlit.yml
+      - .github/workflows/deploy-ecs-reusable.yml
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-chainlit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-ecs-reusable.yml
+    with:
+      aws_region: ${{ vars.AWS_REGION || 'eu-west-1' }}
+      aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME || 'arn:aws:iam::796576079636:role/GitHubActionsDeployRole' }}
+      ecr_repository: ruter-chainlit
+      ecs_cluster: ruter-chatbot
+      ecs_service: ruter-chainlit-service
+      ecs_task_family: ruter-chainlit
+      ecs_container_name: chainlit
+      dockerfile: Dockerfile.chainlit

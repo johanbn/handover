@@ -1,0 +1,394 @@
+name: Bootstrap AWS environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: AWS region for the target environment
+        required: true
+        default: eu-west-1
+      runtime_stack_name:
+        description: CloudFormation stack name for runtime resources
+        required: true
+        default: ruter-chatbot-runtime
+      network_stack_name:
+        description: CloudFormation stack name for network resources
+        required: true
+        default: ruter-chatbot-network
+      cicd_stack_name:
+        description: CloudFormation stack name for CI/CD resources
+        required: true
+        default: ruter-chatbot-cicd
+      network_parameters_file:
+        description: Path to the network parameter file in the repo
+        required: true
+        default: infra/cloudformation/network.parameters.handoff.json
+      runtime_parameters_file:
+        description: Path to the runtime parameter file in the repo
+        required: true
+        default: infra/cloudformation/runtime.parameters.handoff.json
+      github_repository:
+        description: owner/repo that should be allowed to deploy
+        required: true
+        default: johanbn89/ruter_chatbot
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: ${{ inputs.aws_region }}
+      NETWORK_STACK_NAME: ${{ inputs.network_stack_name }}
+      RUNTIME_STACK_NAME: ${{ inputs.runtime_stack_name }}
+      CICD_STACK_NAME: ${{ inputs.cicd_stack_name }}
+      NETWORK_PARAMETERS_FILE: ${{ inputs.network_parameters_file }}
+      RUNTIME_PARAMETERS_FILE: ${{ inputs.runtime_parameters_file }}
+      GITHUB_REPOSITORY_NAME: ${{ inputs.github_repository }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure bootstrap AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_BOOTSTRAP_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_BOOTSTRAP_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_BOOTSTRAP_SESSION_TOKEN }}
+
+      - name: Deploy network stack
+        id: network_stack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if aws cloudformation describe-stacks --stack-name "${NETWORK_STACK_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+            echo "Updating network stack ${NETWORK_STACK_NAME}"
+            set +e
+            UPDATE_OUTPUT="$(aws cloudformation update-stack \
+              --region "${AWS_REGION}" \
+              --stack-name "${NETWORK_STACK_NAME}" \
+              --template-body file://infra/cloudformation/network.yaml \
+              --parameters file://"${NETWORK_PARAMETERS_FILE}" \
+              --capabilities CAPABILITY_NAMED_IAM 2>&1)"
+            UPDATE_EXIT=$?
+            set -e
+
+            if [ ${UPDATE_EXIT} -ne 0 ]; then
+              if echo "${UPDATE_OUTPUT}" | grep -q "No updates are to be performed"; then
+                echo "Network stack already up to date"
+              else
+                echo "${UPDATE_OUTPUT}"
+                exit ${UPDATE_EXIT}
+              fi
+            else
+              aws cloudformation wait stack-update-complete \
+                --region "${AWS_REGION}" \
+                --stack-name "${NETWORK_STACK_NAME}"
+            fi
+          else
+            echo "Creating network stack ${NETWORK_STACK_NAME}"
+            aws cloudformation create-stack \
+              --region "${AWS_REGION}" \
+              --stack-name "${NETWORK_STACK_NAME}" \
+              --template-body file://infra/cloudformation/network.yaml \
+              --parameters file://"${NETWORK_PARAMETERS_FILE}" \
+              --capabilities CAPABILITY_NAMED_IAM
+
+            aws cloudformation wait stack-create-complete \
+              --region "${AWS_REGION}" \
+              --stack-name "${NETWORK_STACK_NAME}"
+          fi
+
+      - name: Prepare runtime parameter files
+        id: runtime_param_files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VPC_ID="$(aws cloudformation describe-stacks \
+            --region "${AWS_REGION}" \
+            --stack-name "${NETWORK_STACK_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='VpcId'].OutputValue | [0]" \
+            --output text)"
+          ALB_SUBNET_IDS="$(aws cloudformation describe-stacks \
+            --region "${AWS_REGION}" \
+            --stack-name "${NETWORK_STACK_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='AlbSubnetIds'].OutputValue | [0]" \
+            --output text)"
+          SERVICE_SUBNET_IDS="$(aws cloudformation describe-stacks \
+            --region "${AWS_REGION}" \
+            --stack-name "${NETWORK_STACK_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='ServiceSubnetIds'].OutputValue | [0]" \
+            --output text)"
+
+          export VPC_ID
+          export ALB_SUBNET_IDS
+          export SERVICE_SUBNET_IDS
+
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          src = pathlib.Path(os.environ["RUNTIME_PARAMETERS_FILE"])
+          with src.open("r", encoding="utf-8") as fh:
+              params = json.load(fh)
+
+          values = {item["ParameterKey"]: item["ParameterValue"] for item in params}
+          values["VpcId"] = os.environ["VPC_ID"]
+          values["AlbSubnetIds"] = os.environ["ALB_SUBNET_IDS"]
+          values["ServiceSubnetIds"] = os.environ["SERVICE_SUBNET_IDS"]
+
+          ordered = [{"ParameterKey": key, "ParameterValue": value} for key, value in values.items()]
+
+          full_path = pathlib.Path("infra/cloudformation/runtime.parameters.bootstrap.json")
+          foundation_path = pathlib.Path("infra/cloudformation/runtime.parameters.bootstrap.foundation.json")
+
+          with full_path.open("w", encoding="utf-8") as fh:
+              json.dump(ordered, fh, indent=2)
+
+          foundation_values = dict(values)
+          foundation_values["ApiDesiredCount"] = "0"
+          foundation_values["ChainlitDesiredCount"] = "0"
+          foundation_values["ApiMinCapacity"] = "0"
+          foundation_values["ChainlitMinCapacity"] = "0"
+          foundation_ordered = [{"ParameterKey": key, "ParameterValue": value} for key, value in foundation_values.items()]
+          with foundation_path.open("w", encoding="utf-8") as fh:
+              json.dump(foundation_ordered, fh, indent=2)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"full={full_path.as_posix()}\n")
+              out.write(f"foundation={foundation_path.as_posix()}\n")
+          PY
+
+      - name: Deploy runtime foundation stack
+        id: runtime_stack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if aws cloudformation describe-stacks --stack-name "${RUNTIME_STACK_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Runtime stack already exists, skipping foundation-only bootstrap pass"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Creating runtime stack foundation ${RUNTIME_STACK_NAME}"
+            aws cloudformation create-stack \
+              --region "${AWS_REGION}" \
+              --stack-name "${RUNTIME_STACK_NAME}" \
+              --template-body file://infra/cloudformation/runtime.yaml \
+              --parameters file://"${{ steps.runtime_param_files.outputs.foundation }}" \
+              --capabilities CAPABILITY_NAMED_IAM
+
+            aws cloudformation wait stack-create-complete \
+              --region "${AWS_REGION}" \
+              --stack-name "${RUNTIME_STACK_NAME}"
+          fi
+
+      - name: Read AWS account id
+        id: aws_account
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image URIs
+        id: image_uris
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import json
+          import os
+
+          path = os.environ["RUNTIME_PARAMETER_FILE"]
+          with open(path, "r", encoding="utf-8") as fh:
+              data = json.load(fh)
+
+          values = {item["ParameterKey"]: item["ParameterValue"] for item in data}
+          account_id = os.environ["AWS_ACCOUNT_ID"]
+          region = os.environ["AWS_REGION"]
+          ecr_registry = f"{account_id}.dkr.ecr.{region}.amazonaws.com"
+
+          api_image_uri = values.get("ApiImageUri", "").strip()
+          if not api_image_uri:
+              api_tag = values.get("ApiImageTag", "prod-latest").strip() or "prod-latest"
+              api_image_uri = f"{ecr_registry}/ruter-chatbot:{api_tag}"
+
+          chainlit_image_uri = values.get("ChainlitImageUri", "").strip()
+          if not chainlit_image_uri:
+              chainlit_tag = values.get("ChainlitImageTag", "prod-latest").strip() or "prod-latest"
+              chainlit_image_uri = f"{ecr_registry}/ruter-chainlit:{chainlit_tag}"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"api_image_uri={api_image_uri}\n")
+              out.write(f"chainlit_image_uri={chainlit_image_uri}\n")
+              out.write(f"ecr_registry={ecr_registry}\n")
+          PY
+        env:
+          RUNTIME_PARAMETER_FILE: ${{ steps.runtime_param_files.outputs.full }}
+          AWS_ACCOUNT_ID: ${{ steps.aws_account.outputs.account_id }}
+
+      - name: Login to ECR
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${{ steps.image_uris.outputs.ecr_registry }}"
+
+      - name: Build and push bootstrap images
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker build -f Dockerfile.prod -t "${{ steps.image_uris.outputs.api_image_uri }}" .
+          docker push "${{ steps.image_uris.outputs.api_image_uri }}"
+
+          docker build -f Dockerfile.chainlit -t "${{ steps.image_uris.outputs.chainlit_image_uri }}" .
+          docker push "${{ steps.image_uris.outputs.chainlit_image_uri }}"
+
+      - name: Deploy full runtime stack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ steps.runtime_stack.outputs.exists }}" = "true" ]; then
+            echo "Updating runtime stack ${RUNTIME_STACK_NAME}"
+          else
+            echo "Activating services in freshly created runtime stack ${RUNTIME_STACK_NAME}"
+          fi
+
+          set +e
+          UPDATE_OUTPUT="$(aws cloudformation update-stack \
+            --region "${AWS_REGION}" \
+            --stack-name "${RUNTIME_STACK_NAME}" \
+            --template-body file://infra/cloudformation/runtime.yaml \
+            --parameters file://"${{ steps.runtime_param_files.outputs.full }}" \
+            --capabilities CAPABILITY_NAMED_IAM 2>&1)"
+          UPDATE_EXIT=$?
+          set -e
+
+          if [ ${UPDATE_EXIT} -ne 0 ]; then
+            if echo "${UPDATE_OUTPUT}" | grep -q "No updates are to be performed"; then
+              echo "Runtime stack already up to date"
+            else
+              echo "${UPDATE_OUTPUT}"
+              exit ${UPDATE_EXIT}
+            fi
+          else
+            aws cloudformation wait stack-update-complete \
+              --region "${AWS_REGION}" \
+              --stack-name "${RUNTIME_STACK_NAME}"
+          fi
+
+      - name: Read runtime outputs
+        id: runtime_outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TASK_EXEC_ROLE_ARN="$(aws cloudformation describe-stacks \
+            --region "${AWS_REGION}" \
+            --stack-name "${RUNTIME_STACK_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='TaskExecutionRoleArn'].OutputValue | [0]" \
+            --output text)"
+          BEDROCK_TASK_ROLE_ARN="$(aws cloudformation describe-stacks \
+            --region "${AWS_REGION}" \
+            --stack-name "${RUNTIME_STACK_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='BedrockTaskRoleArn'].OutputValue | [0]" \
+            --output text)"
+
+          echo "task_execution_role_arn=${TASK_EXEC_ROLE_ARN}" >> "$GITHUB_OUTPUT"
+          echo "bedrock_task_role_arn=${BEDROCK_TASK_ROLE_ARN}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy CI/CD stack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CICD_PARAMETERS=(
+            "ParameterKey=GitHubRepository,ParameterValue=${GITHUB_REPOSITORY_NAME}"
+            "ParameterKey=TaskExecutionRoleArn,ParameterValue=${{ steps.runtime_outputs.outputs.task_execution_role_arn }}"
+            "ParameterKey=BedrockTaskRoleArn,ParameterValue=${{ steps.runtime_outputs.outputs.bedrock_task_role_arn }}"
+          )
+
+          if aws cloudformation describe-stacks --stack-name "${CICD_STACK_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+            echo "Updating CI/CD stack ${CICD_STACK_NAME}"
+            set +e
+            UPDATE_OUTPUT="$(aws cloudformation update-stack \
+              --region "${AWS_REGION}" \
+              --stack-name "${CICD_STACK_NAME}" \
+              --template-body file://infra/cloudformation/cicd.yaml \
+              --parameters "${CICD_PARAMETERS[@]}" \
+              --capabilities CAPABILITY_NAMED_IAM 2>&1)"
+            UPDATE_EXIT=$?
+            set -e
+
+            if [ ${UPDATE_EXIT} -ne 0 ]; then
+              if echo "${UPDATE_OUTPUT}" | grep -q "No updates are to be performed"; then
+                echo "CI/CD stack already up to date"
+              else
+                echo "${UPDATE_OUTPUT}"
+                exit ${UPDATE_EXIT}
+              fi
+            else
+              aws cloudformation wait stack-update-complete \
+                --region "${AWS_REGION}" \
+                --stack-name "${CICD_STACK_NAME}"
+            fi
+          else
+            echo "Creating CI/CD stack ${CICD_STACK_NAME}"
+            aws cloudformation create-stack \
+              --region "${AWS_REGION}" \
+              --stack-name "${CICD_STACK_NAME}" \
+              --template-body file://infra/cloudformation/cicd.yaml \
+              --parameters "${CICD_PARAMETERS[@]}" \
+              --capabilities CAPABILITY_NAMED_IAM
+
+            aws cloudformation wait stack-create-complete \
+              --region "${AWS_REGION}" \
+              --stack-name "${CICD_STACK_NAME}"
+          fi
+
+      - name: Read CI/CD outputs
+        id: cicd_outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ROLE_ARN="$(aws cloudformation describe-stacks \
+            --region "${AWS_REGION}" \
+            --stack-name "${CICD_STACK_NAME}" \
+            --query "Stacks[0].Outputs[?OutputKey=='GitHubActionsDeployRoleArn'].OutputValue | [0]" \
+            --output text)"
+
+          echo "deploy_role_arn=${ROLE_ARN}" >> "$GITHUB_OUTPUT"
+
+      - name: Set repository variables
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh variable set AWS_REGION --body "${AWS_REGION}"
+          gh variable set AWS_ROLE_TO_ASSUME --body "${{ steps.cicd_outputs.outputs.deploy_role_arn }}"
+
+      - name: Bootstrap summary
+        shell: bash
+        run: |
+          {
+            echo "## AWS bootstrap complete"
+            echo ""
+            echo "- Runtime stack: \`${RUNTIME_STACK_NAME}\`"
+            echo "- CI/CD stack: \`${CICD_STACK_NAME}\`"
+            echo "- AWS region variable set to: \`${AWS_REGION}\`"
+            echo "- AWS role variable set to: \`${{ steps.cicd_outputs.outputs.deploy_role_arn }}\`"
+            echo ""
+            echo "Next step: push to \`dev\` or run the deploy workflows manually."
+          } >> "$GITHUB_STEP_SUMMARY"

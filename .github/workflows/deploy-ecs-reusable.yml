@@ -1,0 +1,198 @@
+name: Deploy ECS reusable
+
+on:
+  workflow_call:
+    inputs:
+      aws_region:
+        required: true
+        type: string
+      aws_role_to_assume:
+        required: true
+        type: string
+      ecr_repository:
+        required: true
+        type: string
+      ecs_cluster:
+        required: true
+        type: string
+      ecs_service:
+        required: true
+        type: string
+      ecs_task_family:
+        required: true
+        type: string
+      ecs_container_name:
+        required: true
+        type: string
+      dockerfile:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: ${{ inputs.aws_region }}
+      AWS_ROLE_TO_ASSUME: ${{ inputs.aws_role_to_assume }}
+      ECR_REPOSITORY: ${{ inputs.ecr_repository }}
+      ECS_CLUSTER: ${{ inputs.ecs_cluster }}
+      ECS_SERVICE: ${{ inputs.ecs_service }}
+      ECS_TASK_FAMILY: ${{ inputs.ecs_task_family }}
+      ECS_CONTAINER_NAME: ${{ inputs.ecs_container_name }}
+      DOCKERFILE: ${{ inputs.dockerfile }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          IMAGE_SHA_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${GITHUB_SHA}"
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            IMAGE_ALIAS="prod-latest"
+          else
+            IMAGE_ALIAS="dev-latest"
+          fi
+          IMAGE_ALIAS_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_ALIAS}"
+          echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}" >> "$GITHUB_ENV"
+          echo "IMAGE_SHA_URI=${IMAGE_SHA_URI}" >> "$GITHUB_ENV"
+          echo "IMAGE_ALIAS_URI=${IMAGE_ALIAS_URI}" >> "$GITHUB_ENV"
+
+      - name: Build image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -f "${DOCKERFILE}" -t "${IMAGE_SHA_URI}" .
+          docker tag "${IMAGE_SHA_URI}" "${IMAGE_ALIAS_URI}"
+
+      - name: Push image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push "${IMAGE_SHA_URI}"
+          docker push "${IMAGE_ALIAS_URI}"
+
+      - name: Render task definition
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_TASK_FAMILY}" \
+            --query taskDefinition \
+            > task-definition.json
+
+          python - <<'PY'
+          import json
+          import os
+
+          with open("task-definition.json", "r", encoding="utf-8") as fh:
+              task_def = json.load(fh)
+
+          allowed_keys = [
+              "family",
+              "taskRoleArn",
+              "executionRoleArn",
+              "networkMode",
+              "containerDefinitions",
+              "volumes",
+              "placementConstraints",
+              "requiresCompatibilities",
+              "cpu",
+              "memory",
+              "runtimePlatform",
+              "ephemeralStorage",
+              "proxyConfiguration",
+              "ipcMode",
+              "pidMode",
+              "inferenceAccelerators",
+          ]
+          payload = {
+              key: task_def[key]
+              for key in allowed_keys
+              if key in task_def and task_def[key] is not None
+          }
+
+          target_container = os.environ["ECS_CONTAINER_NAME"]
+          image_uri = os.environ["IMAGE_SHA_URI"]
+
+          updated = False
+          for container in payload["containerDefinitions"]:
+              if container["name"] == target_container:
+                  container["image"] = image_uri
+                  updated = True
+                  break
+
+          if not updated:
+              raise SystemExit(f"Container '{target_container}' not found in task definition")
+
+          with open("task-definition.register.json", "w", encoding="utf-8") as fh:
+              json.dump(payload, fh)
+          PY
+
+      - name: Register task definition
+        id: register
+        shell: bash
+        run: |
+          set -euo pipefail
+          TASK_DEF_ARN="$(aws ecs register-task-definition \
+            --cli-input-json file://task-definition.register.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)"
+          echo "task_definition_arn=${TASK_DEF_ARN}" >> "$GITHUB_OUTPUT"
+
+      - name: Update ECS service
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --task-definition "${{ steps.register.outputs.task_definition_arn }}" \
+            --force-new-deployment
+
+      - name: Wait for service stability
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 80); do
+            STATUS="$(aws ecs describe-services \
+              --cluster "${ECS_CLUSTER}" \
+              --services "${ECS_SERVICE}" \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState | [0]' \
+              --output text)"
+            REASON="$(aws ecs describe-services \
+              --cluster "${ECS_CLUSTER}" \
+              --services "${ECS_SERVICE}" \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutStateReason | [0]' \
+              --output text)"
+
+            echo "Primary rollout state: ${STATUS}"
+            echo "Reason: ${REASON}"
+
+            if [ "${STATUS}" = "COMPLETED" ]; then
+              exit 0
+            fi
+
+            if [ "${STATUS}" = "FAILED" ]; then
+              echo "Deployment failed"
+              exit 1
+            fi
+
+            sleep 15
+          done
+
+          echo "Timed out waiting for ECS blue/green deployment to complete"
+          exit 1

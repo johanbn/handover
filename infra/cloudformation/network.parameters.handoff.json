@@ -1,0 +1,22 @@
+[
+  {
+    "ParameterKey": "VpcCidr",
+    "ParameterValue": "172.31.0.0/16"
+  },
+  {
+    "ParameterKey": "PublicSubnet1Cidr",
+    "ParameterValue": "172.31.16.0/20"
+  },
+  {
+    "ParameterKey": "PublicSubnet2Cidr",
+    "ParameterValue": "172.31.32.0/20"
+  },
+  {
+    "ParameterKey": "AvailabilityZone1",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "AvailabilityZone2",
+    "ParameterValue": ""
+  }
+]

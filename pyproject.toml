@@ -6,18 +6,31 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "atlassian-python-api>=4.0.7",
-    "chromadb>=1.5.2",
+    "boto3>=1.42.68",
+    "botocore[crt]>=1.42.70",
+    "faiss-cpu>=1.13.2",
+    "langchain>=1.2.15",
+    "langchain-aws>=1.4.0",
     "langchain-community>=0.4.1",
     "langchain-core>=1.2.16",
-    "langchain-ollama>=1.0.1",
+    "langchain-huggingface>=1.2.1",
     "langgraph>=1.0.10",
     "lxml>=6.0.2",
+    "pydantic>=2.12.5",
+    "requests>=2.32.5",
+    "transformers>=5.3.0",
 ]
 
 [dependency-groups]
-dev = ["notebook>=7.5.4"]
+chainlit = ["chainlit>=2.5.5"]
+dev = [
+    "chromadb>=1.5.2",
+    "ipywidgets>=8.1.8",
+    "langchain-ollama>=1.0.1",
+    "mlflow>=3.1.1",
+    "notebook>=7.5.4",
+]
 prod = ["fastapi>=0.135.1", "uvicorn>=0.41.0"]
-dependencies = []
 
 
 [build-system]

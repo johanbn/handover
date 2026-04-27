@@ -1,0 +1,72 @@
+from pydantic import BaseModel, Field, model_validator
+
+from ruter_chatbot.graph.policy import GraphPolicy
+from ruter_chatbot.types.iac.edge_spec import (
+    EdgeSpec,
+    RouterEdgeSpec,
+    SimpleEdgeSpec,
+    ToolsConditionEdgeSpec,
+)
+from ruter_chatbot.types.iac.node_spec import LLMNodeSpec, NodeSpec, ToolNodeSpec
+
+class GraphSpec(BaseModel):
+    state_key: str
+    """Key to state registry in specs"""
+
+    nodes: list[NodeSpec]
+    edges: list[EdgeSpec]
+    policy: GraphPolicy = Field(default_factory=GraphPolicy)
+
+    @model_validator(mode="after")
+    def validate_graph(self):
+        node_names: set[str] = {n.name for n in self.nodes}
+        nodes_by_name = {n.name: n for n in self.nodes}
+
+        if len(node_names) != len(self.nodes):
+            raise ValueError("Duplicate node names detected.")
+
+        for edge in self.edges:
+            if edge.source not in node_names:
+                raise ValueError(f"Edge source '{edge.source}' not found.")
+
+            if isinstance(edge, SimpleEdgeSpec):
+                if edge.target not in node_names:
+                    raise ValueError(f"Edge target '{edge.target}' not found.")
+
+            elif isinstance(edge, RouterEdgeSpec):
+                for label, target in edge.routes.items():
+                    if target not in node_names:
+                        raise ValueError(
+                            f"Router route '{label}' points to unknown node '{target}'."
+                        )
+
+                if edge.default_target and edge.default_target not in node_names:
+                    raise ValueError(
+                        f"Detected edge with fallback to unknown node: '{edge.default_target}'"
+                    )
+
+            elif isinstance(edge, ToolsConditionEdgeSpec):
+                if edge.tool_target not in node_names:
+                    raise ValueError(
+                        f"Tools edge points to unknown tool node '{edge.tool_target}'."
+                    )
+
+                if not isinstance(nodes_by_name[edge.tool_target], ToolNodeSpec):
+                    raise ValueError(
+                        f"Tools edge target '{edge.tool_target}' must be a tool node."
+                    )
+
+                if not isinstance(nodes_by_name[edge.source], LLMNodeSpec):
+                    raise ValueError(
+                        f"Tools edge source '{edge.source}' must be an llm node."
+                    )
+
+                if edge.no_tool_target and edge.no_tool_target not in node_names:
+                    raise ValueError(
+                        f"Tools edge fallback points to unknown node '{edge.no_tool_target}'."
+                    )
+
+            else:
+                raise ValueError(f"Invalid edge type detected: {type(edge)}")
+
+        return self

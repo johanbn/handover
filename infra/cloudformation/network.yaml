@@ -1,0 +1,145 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Network foundation for the Ruter chatbot environment in eu-west-1.
+
+Parameters:
+  ProjectTagValue:
+    Type: String
+    Default: chatbot
+
+  VpcCidr:
+    Type: String
+    Default: 172.31.0.0/16
+
+  PublicSubnet1Cidr:
+    Type: String
+    Default: 172.31.16.0/20
+
+  PublicSubnet2Cidr:
+    Type: String
+    Default: 172.31.32.0/20
+
+  AvailabilityZone1:
+    Type: String
+    Default: ''
+    Description: Optional AZ override for subnet 1. Leave empty to use the first AZ in the region.
+
+  AvailabilityZone2:
+    Type: String
+    Default: ''
+    Description: Optional AZ override for subnet 2. Leave empty to use the second AZ in the region.
+
+Conditions:
+  HasAvailabilityZone1: !Not [!Equals [!Ref AvailabilityZone1, '']]
+  HasAvailabilityZone2: !Not [!Equals [!Ref AvailabilityZone2, '']]
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: ruter-chatbot-vpc
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ruter-chatbot-igw
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: ruter-chatbot-public-rt
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: !If
+        - HasAvailabilityZone1
+        - !Ref AvailabilityZone1
+        - !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: ruter-chatbot-public-a
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnet2Cidr
+      AvailabilityZone: !If
+        - HasAvailabilityZone2
+        - !Ref AvailabilityZone2
+        - !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: ruter-chatbot-public-b
+        - Key: ruter
+          Value: !Ref ProjectTagValue
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+
+  AlbSubnet1Id:
+    Value: !Ref PublicSubnet1
+
+  AlbSubnet2Id:
+    Value: !Ref PublicSubnet2
+
+  ServiceSubnet1Id:
+    Value: !Ref PublicSubnet1
+
+  ServiceSubnet2Id:
+    Value: !Ref PublicSubnet2
+
+  AlbSubnetIds:
+    Value: !Join [',', [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+
+  ServiceSubnetIds:
+    Value: !Join [',', [!Ref PublicSubnet1, !Ref PublicSubnet2]]

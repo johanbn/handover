@@ -1,7 +1,50 @@
 services:
   notebook:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./src:/app/src
+      - ./notebooks:/app/notebooks
+      - ./examples:/app/examples
+      - ${OLLAMA_HOST_DIR}:/root/.ollama/models # define OLLAMA_HOST_DIR in .env
+    # Ollama from host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8888:8888"
+    env_file:
+      - .env
+    environment:
+      - SECRET_DIR=/run/secrets
+      - OLLAMA_MODELS=/root/.ollama/models
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - AWS_REGION=${AWS_REGION} # define in .env
+      - VECTOR_STORE_CACHE_DIR=/app/.local/vector_store_cache
+    secrets:
+      - confluence_token
+      - aws_bedrock_token
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
     volumes:
-      - .:/app
+      - ./.local/vector_store_cache:/app/.local/vector_store_cache
+    env_file:
+      - .env
+    environment:
+      - SECRET_DIR=/run/secrets
+      - AWS_REGION=${AWS_REGION}
+      - VECTOR_STORE_CACHE_DIR=/app/.local/vector_store_cache
+    secrets:
+      - confluence_token
+      - aws_bedrock_token
+    ports:
+      - "8080:8000"
+
+secrets:
+  confluence_token:
+    file: .secrets/confluence_token.txt
+  aws_bedrock_token:
+    file: .secrets/aws_bedrock_token.txt

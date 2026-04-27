@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "GitHubRepository",
+    "ParameterValue": "REPLACE_ME_OWNER/REPLACE_ME_REPO"
+  },
+  {
+    "ParameterKey": "TaskExecutionRoleArn",
+    "ParameterValue": "REPLACE_ME_TASK_EXECUTION_ROLE_ARN"
+  },
+  {
+    "ParameterKey": "BedrockTaskRoleArn",
+    "ParameterValue": "REPLACE_ME_BEDROCK_TASK_ROLE_ARN"
+  }
+]

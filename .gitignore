@@ -1,3 +1,6 @@
+# Logs
+logs/
+
 # Python
 dist/
 build/
@@ -10,6 +13,18 @@ __pycache__/
 
 # Local development state
 .local/
+mlartifacts/
+mlflow.db
+.chainlit/
+chainlit.md
+**-checkpoint.ipynb
+**/.ipynb_checkpoints/
 
 # Local installs of uv packages
-uv.toml
+uv.lock
+
+# enviroment variables
+.env
+.secrets
+
+*.png
