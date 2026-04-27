@@ -484,13 +484,29 @@ jobs:
           echo "deploy_role_arn=${ROLE_ARN}" >> "$GITHUB_OUTPUT"
 
       - name: Set repository variables
+        id: repository_variables
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          set -euo pipefail
-          gh variable set AWS_REGION --body "${AWS_REGION}"
-          gh variable set AWS_ROLE_TO_ASSUME --body "${{ steps.cicd_outputs.outputs.deploy_role_arn }}"
+          set -uo pipefail
+
+          set +e
+          REGION_OUTPUT="$(gh variable set AWS_REGION --body "${AWS_REGION}" 2>&1)"
+          REGION_EXIT=$?
+          ROLE_OUTPUT="$(gh variable set AWS_ROLE_TO_ASSUME --body "${{ steps.cicd_outputs.outputs.deploy_role_arn }}" 2>&1)"
+          ROLE_EXIT=$?
+          set -e
+
+          if [ ${REGION_EXIT} -eq 0 ] && [ ${ROLE_EXIT} -eq 0 ]; then
+            echo "variables_set=true" >> "$GITHUB_OUTPUT"
+            echo "Repository variables were set successfully."
+          else
+            echo "variables_set=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub refused automatic repository variable updates."
+            echo "${REGION_OUTPUT}"
+            echo "${ROLE_OUTPUT}"
+          fi
 
       - name: Bootstrap summary
         shell: bash
@@ -500,8 +516,14 @@ jobs:
             echo ""
             echo "- Runtime stack: \`${RUNTIME_STACK_NAME}\`"
             echo "- CI/CD stack: \`${CICD_STACK_NAME}\`"
-            echo "- AWS region variable set to: \`${AWS_REGION}\`"
-            echo "- AWS role variable set to: \`${{ steps.cicd_outputs.outputs.deploy_role_arn }}\`"
+            if [ "${{ steps.repository_variables.outputs.variables_set }}" = "true" ]; then
+              echo "- Repository variable \`AWS_REGION\` set to: \`${AWS_REGION}\`"
+              echo "- Repository variable \`AWS_ROLE_TO_ASSUME\` set to: \`${{ steps.cicd_outputs.outputs.deploy_role_arn }}\`"
+            else
+              echo "- GitHub did not allow this workflow to set repository variables automatically."
+              echo "- Manually set repository variable \`AWS_REGION\` to: \`${AWS_REGION}\`"
+              echo "- Manually set repository variable \`AWS_ROLE_TO_ASSUME\` to: \`${{ steps.cicd_outputs.outputs.deploy_role_arn }}\`"
+            fi
             echo ""
             echo "Next step: push to \`dev\` or run the deploy workflows manually."
           } >> "$GITHUB_STEP_SUMMARY"

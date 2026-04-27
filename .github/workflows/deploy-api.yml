@@ -27,7 +27,7 @@ jobs:
     uses: ./.github/workflows/deploy-ecs-reusable.yml
     with:
       aws_region: ${{ vars.AWS_REGION || 'eu-west-1' }}
-      aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME || 'arn:aws:iam::796576079636:role/GitHubActionsDeployRole' }}
+      aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
       ecr_repository: ruter-chatbot
       ecs_cluster: ruter-chatbot
       ecs_service: ruter-chatbot-service
