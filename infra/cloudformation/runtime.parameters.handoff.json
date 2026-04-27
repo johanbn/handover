@@ -16,10 +16,6 @@
     "ParameterValue": "johan.norlinder@ruter.no"
   },
   {
-    "ParameterKey": "ConfluenceTokenSecretArn",
-    "ParameterValue": ""
-  },
-  {
     "ParameterKey": "ConfluenceToken",
     "ParameterValue": ""
   }

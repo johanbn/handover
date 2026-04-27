@@ -25,9 +25,9 @@ Denne kan normalt brukes som den er. Endre bare hvis dere vil bruke andre CIDR-e
 Dere må fylle ut:
 
 - `ConfluenceEmail`
-- enten `ConfluenceToken` eller `ConfluenceTokenSecretArn`
+- repo-secret `CONFLUENCE_TOKEN` i GitHub
 
-Ved bootstrap via GitHub Actions kan `ConfluenceToken` stå tom i filen hvis repo-secret `CONFLUENCE_TOKEN` er satt.
+`ConfluenceToken` skal stå tom i parameterfilen. Workflowen setter den fra repo-secret `CONFLUENCE_TOKEN` under bootstrap.
 
 `ApiImageUri` og `ChainlitImageUri` kan stå tomme. Hvis de står tomme, utleder `runtime.yaml` automatisk:
 
@@ -52,7 +52,7 @@ Flyten er:
    - `AWS_BOOTSTRAP_ACCESS_KEY_ID`
    - `AWS_BOOTSTRAP_SECRET_ACCESS_KEY`
    - `AWS_BOOTSTRAP_SESSION_TOKEN` hvis dere bruker midlertidige credentials
-   - `CONFLUENCE_TOKEN` hvis dere ikke bruker `ConfluenceTokenSecretArn`
+   - `CONFLUENCE_TOKEN`
 4. Gå til GitHub-repoet
 5. Åpne `Actions`
 6. Velg [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml)

@@ -16,10 +16,6 @@
     "ParameterValue": "kundeservice@example.com"
   },
   {
-    "ParameterKey": "ConfluenceTokenSecretArn",
-    "ParameterValue": "arn:aws:secretsmanager:eu-west-1:123456789012:secret:confluence-token"
-  },
-  {
     "ParameterKey": "ConfluenceToken",
     "ParameterValue": ""
   },

@@ -41,16 +41,11 @@ Parameters:
     Type: String
     Description: Email used for Confluence access.
 
-  ConfluenceTokenSecretArn:
-    Type: String
-    Default: ''
-    Description: ARN for the Secrets Manager secret or SSM parameter containing CONFLUENCE_TOKEN.
-
   ConfluenceToken:
     Type: String
     Default: ''
     NoEcho: true
-    Description: Plaintext CONFLUENCE_TOKEN fallback for environments that do not use Secrets Manager or SSM.
+    Description: CONFLUENCE_TOKEN provided by the GitHub Actions bootstrap workflow.
 
   ApiImageUri:
     Type: String
@@ -134,7 +129,6 @@ Conditions:
   HasIngressCidr4: !Not [!Equals [!Ref AllowedIngressCidr4, '']]
   HasIngressCidr5: !Not [!Equals [!Ref AllowedIngressCidr5, '']]
   HasIngressCidr6: !Not [!Equals [!Ref AllowedIngressCidr6, '']]
-  HasConfluenceTokenSecretArn: !Not [!Equals [!Ref ConfluenceTokenSecretArn, '']]
   HasConfluenceTokenPlaintext: !Not [!Equals [!Ref ConfluenceToken, '']]
   HasApiImageUri: !Not [!Equals [!Ref ApiImageUri, '']]
   HasChainlitImageUri: !Not [!Equals [!Ref ChainlitImageUri, '']]
@@ -647,12 +641,6 @@ Resources:
               - Name: CONFLUENCE_TOKEN
                 Value: !Ref ConfluenceToken
               - !Ref AWS::NoValue
-          Secrets:
-            - !If
-              - HasConfluenceTokenSecretArn
-              - Name: CONFLUENCE_TOKEN
-                ValueFrom: !Ref ConfluenceTokenSecretArn
-              - !Ref AWS::NoValue
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -696,12 +684,6 @@ Resources:
               - HasConfluenceTokenPlaintext
               - Name: CONFLUENCE_TOKEN
                 Value: !Ref ConfluenceToken
-              - !Ref AWS::NoValue
-          Secrets:
-            - !If
-              - HasConfluenceTokenSecretArn
-              - Name: CONFLUENCE_TOKEN
-                ValueFrom: !Ref ConfluenceTokenSecretArn
               - !Ref AWS::NoValue
           LogConfiguration:
             LogDriver: awslogs

@@ -148,8 +148,7 @@ jobs:
           values["ServiceSubnetIds"] = os.environ["SERVICE_SUBNET_IDS"]
 
           confluence_token = os.environ.get("CONFLUENCE_TOKEN", "").strip()
-          confluence_secret_arn = values.get("ConfluenceTokenSecretArn", "").strip()
-          if confluence_token and not confluence_secret_arn:
+          if confluence_token:
               values["ConfluenceToken"] = confluence_token
 
           ordered = [{"ParameterKey": key, "ParameterValue": value} for key, value in values.items()]
