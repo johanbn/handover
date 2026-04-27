@@ -108,6 +108,8 @@ jobs:
       - name: Prepare runtime parameter files
         id: runtime_param_files
         shell: bash
+        env:
+          CONFLUENCE_TOKEN: ${{ secrets.CONFLUENCE_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -144,6 +146,11 @@ jobs:
           values["VpcId"] = os.environ["VPC_ID"]
           values["AlbSubnetIds"] = os.environ["ALB_SUBNET_IDS"]
           values["ServiceSubnetIds"] = os.environ["SERVICE_SUBNET_IDS"]
+
+          confluence_token = os.environ.get("CONFLUENCE_TOKEN", "").strip()
+          confluence_secret_arn = values.get("ConfluenceTokenSecretArn", "").strip()
+          if confluence_token and not confluence_secret_arn:
+              values["ConfluenceToken"] = confluence_token
 
           ordered = [{"ParameterKey": key, "ParameterValue": value} for key, value in values.items()]
 
