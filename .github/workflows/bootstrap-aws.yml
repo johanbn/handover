@@ -180,7 +180,7 @@ jobs:
           set -e
 
           if [ ${EXIT_CODE} -ne 0 ]; then
-            if echo "${OUTPUT}" | grep -qi "already exists"; then
+            if echo "${OUTPUT}" | grep -Eqi "already exists|has been taken"; then
               echo "ECS service-linked role already exists"
             else
               echo "${OUTPUT}"
