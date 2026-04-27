@@ -11,8 +11,13 @@ Denne mappen er laget for teamet som får repoet overlevert og skal sette opp mi
 - [runtime.parameters.handoff.json](runtime.parameters.handoff.json)
 - [cicd.parameters.handoff.json](cicd.parameters.handoff.json)
 - [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml)
+- [deploy-config.json](../../.github/deploy-config.json)
 
 `*.handoff.json` er filene som skal brukes ved overlevering. `*.example.json` er bare referanser.
+
+`.github/deploy-config.json` peker deploy-workflowene til riktig AWS-region og
+OIDC deploy-role. Den inneholder ikke secrets. For en ny repo-eier/AWS-konto skal
+filen ikke redigeres manuelt; den blir skrevet på nytt av `bootstrap-aws.yml`.
 
 ## Hva må fylles ut
 
@@ -61,6 +66,10 @@ Flyten er:
 9. Velg branch
 10. Start workflowen i GitHub UI
 
+Hvis repoet allerede har en `.github/deploy-config.json` fra en tidligere eier
+eller testkonto, er det forventet. Bootstrap overskriver den med ny `aws_region`
+og ny `aws_role_to_assume` for AWS-kontoen som bootstrap-secretsene peker til.
+
 Når workflowen kjører, gjør den dette:
 
 1. Oppretter nettverket fra `network.yaml`
@@ -71,6 +80,11 @@ Når workflowen kjører, gjør den dette:
 6. Skriver `.github/deploy-config.json` med `aws_region` og `aws_role_to_assume`
 
 Etter dette bruker vanlige deploy-workflows OIDC, ikke bootstrap-secrets.
+
+For en ny eier er dette steget det som kobler repoet til deres AWS-konto:
+`aws_role_to_assume` blir ARN-en til `GitHubActionsDeployRole` som nettopp ble
+opprettet i deres konto. Deploy-workflowene leser denne filen og bruker GitHub
+OIDC til å anta rollen uten AWS access keys.
 
 Viktig: `Read and write permissions` trengs fordi bootstrap-workflowen committer
 `.github/deploy-config.json` tilbake til repoet. Filen inneholder ikke secrets.
