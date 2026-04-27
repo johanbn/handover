@@ -33,8 +33,7 @@ on:
         default: johanbn/handover
 
 permissions:
-  contents: read
-  actions: write
+  contents: write
 
 jobs:
   bootstrap:
@@ -483,40 +482,41 @@ jobs:
 
           echo "deploy_role_arn=${ROLE_ARN}" >> "$GITHUB_OUTPUT"
 
-      - name: Set repository variables
-        id: repository_variables
-        env:
-          DEFAULT_GH_TOKEN: ${{ github.token }}
-          BOOTSTRAP_GITHUB_TOKEN: ${{ secrets.BOOTSTRAP_GITHUB_TOKEN }}
+      - name: Write deployment config
+        id: deployment_config
         shell: bash
         run: |
           set -euo pipefail
 
-          set_repository_variables() {
-            local token="$1"
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
 
-            GH_TOKEN="${token}" gh variable set AWS_REGION \
-              --repo "${GITHUB_REPOSITORY_NAME}" \
-              --body "${AWS_REGION}" &&
-            GH_TOKEN="${token}" gh variable set AWS_ROLE_TO_ASSUME \
-              --repo "${GITHUB_REPOSITORY_NAME}" \
-              --body "${{ steps.cicd_outputs.outputs.deploy_role_arn }}"
+          config = {
+              "aws_region": os.environ["AWS_REGION"],
+              "aws_role_to_assume": os.environ["AWS_ROLE_TO_ASSUME"],
           }
 
-          if set_repository_variables "${DEFAULT_GH_TOKEN}"; then
-            echo "variables_set=true" >> "$GITHUB_OUTPUT"
-            echo "variables_source=GITHUB_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "Repository variables were set successfully with GITHUB_TOKEN."
-          elif [ -n "${BOOTSTRAP_GITHUB_TOKEN}" ] && set_repository_variables "${BOOTSTRAP_GITHUB_TOKEN}"; then
-            echo "variables_set=true" >> "$GITHUB_OUTPUT"
-            echo "variables_source=BOOTSTRAP_GITHUB_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "Repository variables were set successfully with BOOTSTRAP_GITHUB_TOKEN."
+          path = pathlib.Path(".github/deploy-config.json")
+          path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/deploy-config.json
+
+          if git diff --cached --quiet; then
+            echo "config_committed=false" >> "$GITHUB_OUTPUT"
+            echo "Deployment config is already up to date."
           else
-            echo "variables_set=false" >> "$GITHUB_OUTPUT"
-            echo "Could not set repository variables automatically."
-            echo "Enable repository workflow read/write permissions or add a BOOTSTRAP_GITHUB_TOKEN secret with repository Variables write permission."
-            exit 1
+            git commit -m "Update AWS deploy config"
+            git push
+            echo "config_committed=true" >> "$GITHUB_OUTPUT"
+            echo "Deployment config committed."
           fi
+        env:
+          AWS_ROLE_TO_ASSUME: ${{ steps.cicd_outputs.outputs.deploy_role_arn }}
 
       - name: Bootstrap summary
         shell: bash
@@ -526,11 +526,9 @@ jobs:
             echo ""
             echo "- Runtime stack: \`${RUNTIME_STACK_NAME}\`"
             echo "- CI/CD stack: \`${CICD_STACK_NAME}\`"
-            if [ "${{ steps.repository_variables.outputs.variables_set }}" = "true" ]; then
-              echo "- Repository variable \`AWS_REGION\` set to: \`${AWS_REGION}\`"
-              echo "- Repository variable \`AWS_ROLE_TO_ASSUME\` set to: \`${{ steps.cicd_outputs.outputs.deploy_role_arn }}\`"
-              echo "- Repository variables set via: \`${{ steps.repository_variables.outputs.variables_source }}\`"
-            fi
+            echo "- Deployment config: \`.github/deploy-config.json\`"
+            echo "- AWS region: \`${AWS_REGION}\`"
+            echo "- AWS role: \`${{ steps.cicd_outputs.outputs.deploy_role_arn }}\`"
             echo ""
             echo "Next step: push to \`dev\` or run the deploy workflows manually."
           } >> "$GITHUB_STEP_SUMMARY"

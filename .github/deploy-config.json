@@ -1,0 +1,4 @@
+{
+  "aws_region": "eu-west-1",
+  "aws_role_to_assume": "arn:aws:iam::617484368809:role/GitHubActionsDeployRole"
+}

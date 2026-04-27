@@ -24,11 +24,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      aws_region: ${{ steps.config.outputs.aws_region }}
+      aws_role_to_assume: ${{ steps.config.outputs.aws_role_to_assume }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read deployment config
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -f .github/deploy-config.json ]; then
+            echo "Missing .github/deploy-config.json. Run bootstrap-aws.yml first."
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          import os
+
+          with open(".github/deploy-config.json", "r", encoding="utf-8") as fh:
+              config = json.load(fh)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"aws_region={config['aws_region']}\n")
+              out.write(f"aws_role_to_assume={config['aws_role_to_assume']}\n")
+          PY
+
   deploy:
+    needs: config
     uses: ./.github/workflows/deploy-ecs-reusable.yml
     with:
-      aws_region: ${{ vars.AWS_REGION || 'eu-west-1' }}
-      aws_role_to_assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+      aws_region: ${{ needs.config.outputs.aws_region }}
+      aws_role_to_assume: ${{ needs.config.outputs.aws_role_to_assume }}
       ecr_repository: ruter-chainlit
       ecs_cluster: ruter-chatbot
       ecs_service: ruter-chainlit-service

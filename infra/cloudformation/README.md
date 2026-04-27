@@ -54,7 +54,6 @@ Flyten er:
    - `AWS_BOOTSTRAP_SECRET_ACCESS_KEY`
    - `AWS_BOOTSTRAP_SESSION_TOKEN` hvis dere bruker midlertidige credentials
    - `CONFLUENCE_TOKEN`
-   - `BOOTSTRAP_GITHUB_TOKEN` hvis repoets `GITHUB_TOKEN` ikke får skrive Actions variables
 5. Gå til GitHub-repoet
 6. Åpne `Actions`
 7. Velg [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml)
@@ -69,19 +68,15 @@ Når workflowen kjører, gjør den dette:
 3. Bygger og pusher første API- og Chainlit-image til ECR
 4. Aktiverer ECS services, ALB, blue/green og autoscaling
 5. Oppretter CI/CD-oppsettet fra `cicd.yaml`
-6. Setter repo-variablene `AWS_REGION` og `AWS_ROLE_TO_ASSUME`
+6. Skriver `.github/deploy-config.json` med `aws_region` og `aws_role_to_assume`
 
 Etter dette bruker vanlige deploy-workflows OIDC, ikke bootstrap-secrets.
 
-Viktig: `Read and write permissions` trengs fordi bootstrap-workflowen skal sette
-GitHub Actions-variablene `AWS_REGION` og `AWS_ROLE_TO_ASSUME` selv. Disse
-variablene peker deploy-workflowene til AWS OIDC-rollen som ble opprettet av
-`cicd.yaml`. Uten disse variablene er ikke bootstrap komplett.
-
-Hvis GitHub nekter å sette repo-variabler med `GITHUB_TOKEN`, opprett en fine-grained
-GitHub token for målrepoet med `Variables: Read and write`, og lagre den som
-repo-secret `BOOTSTRAP_GITHUB_TOKEN`. Bootstrap bruker den kun til å sette
-`AWS_REGION` og `AWS_ROLE_TO_ASSUME`.
+Viktig: `Read and write permissions` trengs fordi bootstrap-workflowen committer
+`.github/deploy-config.json` tilbake til repoet. Filen inneholder ikke secrets.
+Den peker deploy-workflowene til AWS OIDC-rollen som ble opprettet av `cicd.yaml`.
+Dette unngår GitHub Actions variables, siden `GITHUB_TOKEN` ikke alltid får lov til
+å skrive repo-variabler selv om workflowen har read/write-permissions.
 
 ## Etter bootstrap
 
