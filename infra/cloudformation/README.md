@@ -53,6 +53,7 @@ Flyten er:
    - `AWS_BOOTSTRAP_SECRET_ACCESS_KEY`
    - `AWS_BOOTSTRAP_SESSION_TOKEN` hvis dere bruker midlertidige credentials
    - `CONFLUENCE_TOKEN`
+   - `BOOTSTRAP_GITHUB_TOKEN` hvis repoets `GITHUB_TOKEN` ikke får skrive Actions variables
 4. Gå til GitHub-repoet
 5. Åpne `Actions`
 6. Velg [bootstrap-aws.yml](../../.github/workflows/bootstrap-aws.yml)
@@ -70,6 +71,11 @@ Når workflowen kjører, gjør den dette:
 6. Setter repo-variablene `AWS_REGION` og `AWS_ROLE_TO_ASSUME`
 
 Etter dette bruker vanlige deploy-workflows OIDC, ikke bootstrap-secrets.
+
+Hvis GitHub nekter å sette repo-variabler med `GITHUB_TOKEN`, opprett en fine-grained
+GitHub token for målrepoet med `Variables: Read and write`, og lagre den som
+repo-secret `BOOTSTRAP_GITHUB_TOKEN`. Bootstrap bruker den kun til å sette
+`AWS_REGION` og `AWS_ROLE_TO_ASSUME`.
 
 ## Etter bootstrap
 

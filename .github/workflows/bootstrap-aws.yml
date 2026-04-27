@@ -486,26 +486,36 @@ jobs:
       - name: Set repository variables
         id: repository_variables
         env:
-          GH_TOKEN: ${{ github.token }}
+          DEFAULT_GH_TOKEN: ${{ github.token }}
+          BOOTSTRAP_GITHUB_TOKEN: ${{ secrets.BOOTSTRAP_GITHUB_TOKEN }}
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
 
-          set +e
-          REGION_OUTPUT="$(gh variable set AWS_REGION --body "${AWS_REGION}" 2>&1)"
-          REGION_EXIT=$?
-          ROLE_OUTPUT="$(gh variable set AWS_ROLE_TO_ASSUME --body "${{ steps.cicd_outputs.outputs.deploy_role_arn }}" 2>&1)"
-          ROLE_EXIT=$?
-          set -e
+          set_repository_variables() {
+            local token="$1"
 
-          if [ ${REGION_EXIT} -eq 0 ] && [ ${ROLE_EXIT} -eq 0 ]; then
+            GH_TOKEN="${token}" gh variable set AWS_REGION \
+              --repo "${GITHUB_REPOSITORY_NAME}" \
+              --body "${AWS_REGION}" &&
+            GH_TOKEN="${token}" gh variable set AWS_ROLE_TO_ASSUME \
+              --repo "${GITHUB_REPOSITORY_NAME}" \
+              --body "${{ steps.cicd_outputs.outputs.deploy_role_arn }}"
+          }
+
+          if set_repository_variables "${DEFAULT_GH_TOKEN}"; then
             echo "variables_set=true" >> "$GITHUB_OUTPUT"
-            echo "Repository variables were set successfully."
+            echo "variables_source=GITHUB_TOKEN" >> "$GITHUB_OUTPUT"
+            echo "Repository variables were set successfully with GITHUB_TOKEN."
+          elif [ -n "${BOOTSTRAP_GITHUB_TOKEN}" ] && set_repository_variables "${BOOTSTRAP_GITHUB_TOKEN}"; then
+            echo "variables_set=true" >> "$GITHUB_OUTPUT"
+            echo "variables_source=BOOTSTRAP_GITHUB_TOKEN" >> "$GITHUB_OUTPUT"
+            echo "Repository variables were set successfully with BOOTSTRAP_GITHUB_TOKEN."
           else
             echo "variables_set=false" >> "$GITHUB_OUTPUT"
-            echo "GitHub refused automatic repository variable updates."
-            echo "${REGION_OUTPUT}"
-            echo "${ROLE_OUTPUT}"
+            echo "Could not set repository variables automatically."
+            echo "Enable repository workflow read/write permissions or add a BOOTSTRAP_GITHUB_TOKEN secret with repository Variables write permission."
+            exit 1
           fi
 
       - name: Bootstrap summary
@@ -519,10 +529,7 @@ jobs:
             if [ "${{ steps.repository_variables.outputs.variables_set }}" = "true" ]; then
               echo "- Repository variable \`AWS_REGION\` set to: \`${AWS_REGION}\`"
               echo "- Repository variable \`AWS_ROLE_TO_ASSUME\` set to: \`${{ steps.cicd_outputs.outputs.deploy_role_arn }}\`"
-            else
-              echo "- GitHub did not allow this workflow to set repository variables automatically."
-              echo "- Manually set repository variable \`AWS_REGION\` to: \`${AWS_REGION}\`"
-              echo "- Manually set repository variable \`AWS_ROLE_TO_ASSUME\` to: \`${{ steps.cicd_outputs.outputs.deploy_role_arn }}\`"
+              echo "- Repository variables set via: \`${{ steps.repository_variables.outputs.variables_source }}\`"
             fi
             echo ""
             echo "Next step: push to \`dev\` or run the deploy workflows manually."
