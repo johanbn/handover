@@ -13,14 +13,14 @@
   },
   {
     "ParameterKey": "ConfluenceEmail",
-    "ParameterValue": "REPLACE_ME_CONFLUENCE_EMAIL"
+    "ParameterValue": "johan.norlinder@ruter.no"
   },
   {
     "ParameterKey": "ConfluenceTokenSecretArn",
-    "ParameterValue": ""
+    "ParameterValue": "REPLACE_ME_CONFLUENCE_TOKEN_SECRET_ARN_OR_LEAVE_EMPTY_IF_USING_INLINE_TOKEN"
   },
   {
     "ParameterKey": "ConfluenceToken",
-    "ParameterValue": "REPLACE_ME_CONFLUENCE_TOKEN_OR_LEAVE_EMPTY_IF_USING_SECRET_ARN"
+    "ParameterValue": ""
   }
 ]

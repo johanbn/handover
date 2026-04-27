@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "GitHubRepository",
-    "ParameterValue": "REPLACE_ME_OWNER/REPLACE_ME_REPO"
+    "ParameterValue": "johanbn/handover"
   },
   {
     "ParameterKey": "TaskExecutionRoleArn",
@@ -12,3 +12,4 @@
     "ParameterValue": "REPLACE_ME_BEDROCK_TASK_ROLE_ARN"
   }
 ]
+ 

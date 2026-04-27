@@ -4,7 +4,7 @@ Description: GitHub Actions OIDC and deploy role for the Ruter chatbot environme
 Parameters:
   GitHubRepository:
     Type: String
-    Default: johanbn89/ruter_chatbot
+    Default: johanbn/handover
     Description: owner/repo used by GitHub Actions.
 
   DevBranchName:

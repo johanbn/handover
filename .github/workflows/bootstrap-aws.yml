@@ -30,7 +30,7 @@ on:
       github_repository:
         description: owner/repo that should be allowed to deploy
         required: true
-        default: johanbn89/ruter_chatbot
+        default: johanbn/handover
 
 permissions:
   contents: read
