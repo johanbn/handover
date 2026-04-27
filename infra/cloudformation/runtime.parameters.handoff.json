@@ -17,10 +17,10 @@
   },
   {
     "ParameterKey": "ConfluenceTokenSecretArn",
-    "ParameterValue": "REPLACE_ME_CONFLUENCE_TOKEN_SECRET_ARN_OR_LEAVE_EMPTY_IF_USING_INLINE_TOKEN"
+    "ParameterValue": ""
   },
   {
     "ParameterKey": "ConfluenceToken",
-    "ParameterValue": ""
+    "ParameterValue": "ATATT3xFfGF0xw1zXy9huRpTTTQxaP8t8h0eu0ryFZPznEIX4JhZ_OYRyMd5c_eNBCw0g6lIpcGq-71zw-78lvXZTcWj7-haTjXBN7c_PbwLRsZUKmLtSigBmwv-C1uoxO2WaGv3tGYDYM2jOIRIUEJ5XmI-IG8=6B3A2C3B"
   }
 ]
