@@ -181,7 +181,9 @@ jobs:
               --output table || true
           }
 
+          STACK_EXISTS=false
           if aws cloudformation describe-stacks --stack-name "${RUNTIME_STACK_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+            STACK_EXISTS=true
             STACK_STATUS="$(aws cloudformation describe-stacks \
               --region "${AWS_REGION}" \
               --stack-name "${RUNTIME_STACK_NAME}" \
@@ -197,16 +199,43 @@ jobs:
               aws cloudformation wait stack-delete-complete \
                 --region "${AWS_REGION}" \
                 --stack-name "${RUNTIME_STACK_NAME}"
-              echo "exists=false" >> "$GITHUB_OUTPUT"
+              STACK_EXISTS=false
             else
-              echo "exists=true" >> "$GITHUB_OUTPUT"
-              echo "Runtime stack already exists with status ${STACK_STATUS}, skipping foundation-only bootstrap pass"
+              echo "Runtime stack already exists with status ${STACK_STATUS}; applying foundation parameters"
+            fi
+          fi
+
+          if [ "${STACK_EXISTS}" = "true" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            set +e
+            UPDATE_OUTPUT="$(aws cloudformation update-stack \
+              --region "${AWS_REGION}" \
+              --stack-name "${RUNTIME_STACK_NAME}" \
+              --template-body file://infra/cloudformation/runtime.yaml \
+              --parameters file://"${{ steps.runtime_param_files.outputs.foundation }}" \
+              --capabilities CAPABILITY_NAMED_IAM 2>&1)"
+            UPDATE_EXIT=$?
+            set -e
+
+            if [ ${UPDATE_EXIT} -ne 0 ]; then
+              if echo "${UPDATE_OUTPUT}" | grep -q "No updates are to be performed"; then
+                echo "Runtime foundation stack already up to date"
+              else
+                echo "${UPDATE_OUTPUT}"
+                print_stack_events
+                exit ${UPDATE_EXIT}
+              fi
+            else
+              if ! aws cloudformation wait stack-update-complete \
+                --region "${AWS_REGION}" \
+                --stack-name "${RUNTIME_STACK_NAME}"; then
+                echo "Runtime stack failed to update. Recent stack events:"
+                print_stack_events
+                exit 1
+              fi
             fi
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          if ! aws cloudformation describe-stacks --stack-name "${RUNTIME_STACK_NAME}" --region "${AWS_REGION}" >/dev/null 2>&1; then
             echo "Creating runtime stack foundation ${RUNTIME_STACK_NAME}"
             aws cloudformation create-stack \
               --region "${AWS_REGION}" \
@@ -222,6 +251,15 @@ jobs:
               print_stack_events
               exit 1
             fi
+          fi
+
+          echo "Verifying ECR repositories from runtime foundation"
+          if ! aws ecr describe-repositories \
+            --region "${AWS_REGION}" \
+            --repository-names ruter-chatbot ruter-chainlit >/dev/null; then
+            echo "Runtime foundation completed, but expected ECR repositories are missing. Recent stack events:"
+            print_stack_events
+            exit 1
           fi
 
       - name: Read AWS account id
